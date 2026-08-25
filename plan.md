@@ -4,6 +4,10 @@ This is a plan for **you to build yourself**. It explains the goal, the math you
 use, the steps to follow, and how to verify your work — but deliberately does **not**
 write the code for you. Implement each step on your own and learn by doing.
 
+> **Scope note:** For now we are **not** doing the information-gain / entropy approach.
+> The ML path (predicting the answer word) is the focus. The entropy idea is noted as
+> deferred at the end and can be revisited later.
+
 ---
 
 ## 1. Project overview
@@ -60,91 +64,183 @@ vehicle.
 - It needs a full ML pipeline: data generation → feature engineering → train/test split →
   training → evaluation → prediction comparison.
 
----
-
-## 3. Environment setup
-
-- Use a virtual environment, e.g. `python -m venv .venv`.
-- Install: `numpy`, `scipy`, `scikit-learn`, `matplotlib`, `pandas`, `pytest`.
-- Save the pinned versions to `requirements.txt` after a successful install
-  (`pip freeze > requirements.txt`).
-- **Note (verified on this machine):** your default `python3` is 3.14. scikit-learn /
-  scipy wheels exist for it, but if install fails, fall back to `python3.13` — several
-  are already installed (`python3.11`…`python3.14`). Don't spend time fighting installs;
-  pick the newest version where `pip install scikit-learn` succeeds.
+### Important mental model: `answers` vs `words`
+- **`answers`** (2,315) = the words the game can *pick as the secret*. This is the model's
+  **class space / prediction space.** The model is trained over `answers` and only ever
+  predicts an answer word.
+- **`words`** (~14,855) = every *legal guess* you can type. This is only needed for
+  *searching over possible probes* (the deferred entropy approach). **The ML model does
+  not need `words` to pick a guess** — it predicts from `answers`, and guessing an answer
+  is always a legal move.
 
 ---
 
-## 4. Data: where to get real Wordle word lists
+## 3. Progress tracker (current status)
 
-Use the real NYT Wordle lists for fidelity. Both sources below were verified reachable
-and give clean lowercase 5-letter words.
+| Area | Status |
+|---|---|
+| Environment (`.venv` + `requirements.txt`) | ✅ Done |
+| Word-list data (`src/data/words.txt`, `src/data/answers.txt`) | ✅ Done |
+| `src/wordle/feedback.py` | ✅ Done — repeated-letter bug fixed |
+| `src/wordle/vocabulary.py` | ✅ Done — refactored (`Vocabulary` dataclass, camelCase) |
+| `src/wordle/game.py` | ⬜ To do |
+| `src/wordle/features.py` | ⬜ To do |
+| `src/wordle/dataset.py` | ⬜ To do |
+| Tests | ⬜ To do |
+| Attempt 1 (predefined models) | ⬜ To do |
+| Attempt 2 (from-scratch model) | ⬜ To do |
 
-- **Full vocabulary** (`words`, includes answers + allowed guesses, **14,855 words**):
-  `https://raw.githubusercontent.com/tabatkins/wordle-list/main/words`
-- **Answer list** (the ~2,309 words the game actually picks from):
+---
+
+## 4. Environment setup — ✅ DONE
+
+- Virtual environment created: `.venv`.
+- Dependencies installed and pinned in `requirements.txt`:
+  `numpy`, `scipy`, `scikit-learn`, `matplotlib`, `pandas`, `pytest`.
+- Your `.venv` is Python 3.9. **Note:** if you ever need a newer NumPy/scikit-learn that
+  requires a later Python, recreate the venv with `python3.13` (verified installed).
+
+---
+
+## 5. Data — ✅ DONE
+
+The real NYT-style word lists are downloaded and committed as:
+- `src/data/words.txt` — full 5-letter vocabulary (answers + allowed guesses, **14,855**).
+- `src/data/answers.txt` — the 2,315 possible *secret* words.
+
+**Note on location:** your data lives at `src/data/` (not a top-level `data/`). That matches
+how `vocabulary.py` resolves its path (`src/wordle` → parent → `data`). Keep them in sync.
+
+**Optional follow-up:** you currently don't have a `download_wordlist.py` checked in. The
+original sources (if you want to regenerate later):
+- Full vocab: `https://raw.githubusercontent.com/tabatkins/wordle-list/main/words`
+- Answers (stored as a Python list literal — parse with `ast.literal_eval`):
   `https://raw.githubusercontent.com/LaurentLessard/wordlesolver/main/solutions_nyt.txt`
-  — note this file is stored as a **Python list literal** (a giant comma-separated,
-  quoted, mostly-single-line blob), so parse it with `ast.literal_eval` and strip quotes,
-  keeping only 5-letter lowercase entries.
-
-**Your job:** write `download_wordlist.py` that fetches both, cleans them, and writes
-`data/words.txt` and `data/answers.txt`. Commit the data files so later steps work
-offline. Verify: `answers` ⊂ `words`, all length 5, all lowercase.
 
 ---
 
-## 5. Shared core (build this first)
+## 6. Shared core — file layout & function-by-function breakdown
 
-Write a small package (e.g. `src/wordle/`) with three pieces:
+The shared core is a small package at `src/wordle/`. Each file has **one responsibility**.
+Below is the complete contract for every function in every file, plus the current status.
 
-### 5.1 Game engine
-- `feedback(guess, secret) -> tuple[int, ...]` returning per-position color codes, e.g.
-  `0 = gray`, `1 = yellow`, `2 = green`. **Handle the repeated-letter rule carefully:**
-  if a letter appears twice in your guess but once in the secret, only one position can be
-  yellow and the other is gray. A common bug is miscounting duplicates — write tests for it.
-- A function that, given a list of `(guess, pattern)` constraints, returns the set of
-  candidate words still consistent with all feedback (filter the vocabulary).
-- A `game_loop(guess_picker)` helper that plays a full round to solve-rate evaluation.
+```
+src/wordle/
+├── __init__.py    # package marker; optional re-exports
+├── feedback.py    # game rules: colors, feedback(), candidate filtering   [✅ done]
+├── vocabulary.py  # load + clean words.txt / answers.txt, word<->index    [✅ done]
+├── game.py        # GameState + play_game() loop (solver driver)          [⬜ to do]
+├── features.py    # evidence -> fixed-length feature vector                [⬜ to do]
+├── dataset.py     # simulate games -> (X, y, vocab) + no-leakage split     [⬜ to do]
+└── entropy.py     # DEFERRED — information-gain / probe picker             [⏸ deferred]
+```
 
-### 5.2 Feature encoding
-Design a fixed-length feature vector for a game state, e.g. concatenate, for each probe,
-the 5 per-position color codes (so 1 probe → 5 features, 2 probes → 10, …). You may add
-per-letter presence features. The vector must be fixed-length so the model can train on it.
+### 6.1 `feedback.py` — pure game rules (no I/O, no randomness) — ✅ done
 
-### 5.3 Dataset generation
-- Sample secrets uniformly from `answers.txt`.
-- Play a fixed number of **probes** (informative opening guesses — see §6) against each
-  secret to produce the evidence.
-- Output `X` (features) and `y` (answer index).
-- **Train/test split by whole secrets — no leakage.** A secret that appears in training
-  must not appear in testing, or your accuracy will be artificially high. Assert this.
+The most important and most-tested file. Everything else depends on it being correct.
 
----
+| Function | Purpose | Status |
+|---|---|---|
+| `feedback(guess, secret) -> tuple[int, ...]` | The core rule. Compares a guess against the true secret and returns 5 color codes (`0=gray`, `1=yellow`, `2=green`). Logic: **green pass first** (correct letter+position, "use up" that letter), **then yellow/gray pass** (only award yellow as many times as the letter genuinely remains in the secret). | ✅ correct |
+| `candidates_matching(constraints: list[(guess, pattern)], vocab) -> list[str]` | Given recorded `(guess, pattern)` pairs and a vocabulary, return every word that could still be the secret. A candidate `w` is possible iff `feedback(guess, w) == pattern` for *all* constraints — reuse `feedback`. | ✅ correct |
 
-## 6. The entropy baseline (plan.md "Phase 1") — your reference and probe source
+**Fixed ✅** — the yellow pass now skips already-green positions (`if result[x] == 2: continue`),
+so greens are never overwritten. Verified against these cases (tests should still be written
+into `tests/`, see §9):
+- `feedback("aaaba", "ababa") == (2, 0, 2, 2, 2)` — the original bug case
+- `feedback("error", "shear") == (1, 0, 0, 0, 2)` — the double-`r` case
+- `feedback("crane", "crate") == (2, 2, 2, 0, 2)`
 
-`plan.md` originally framed a Phase-1 solver using **information theory (entropy)**. Keep
-it, but as a *reference benchmark* and a *source of informative probes*, not the main focus.
+### 6.2 `vocabulary.py` — loading words + word↔index mapping — ✅ done
 
-- Compute, for a candidate guess, the **expected information** (entropy) it would reveal:
-  simulate the feedback pattern of that guess against every possible answer, count how
-  many answers fall into each pattern bucket, and compute
-  `H = −Σ p_bucket · log₂(p_bucket)`. High entropy ⇒ the guess splits candidates well.
-- Use a high-entropy opening guess (e.g. evaluate all words once and pick the max) as the
-  fixed probe(s) for dataset generation.
-- This solver also gives you a **baseline solve rate** to compare your ML solver against.
+| Function | Purpose | Status |
+|---|---|---|
+| `loadWords() -> tuple[str, ...]` | Reads `src/data/words.txt`, returns the full ~14,855-word vocabulary (all legal guesses). Cached (`@cache`). | ✅ done |
+| `loadAnswers() -> tuple[str, ...]` | Reads `src/data/answers.txt`, returns the 2,315 possible *secrets*. Cached. | ✅ done |
+| `class Vocabulary` (dataclass, `frozen=True`) | Holds `words` (tuple) and `index` (`dict`), with `indexOf(word)` and `wordAt(i)` for word↔index lookup. | ✅ done |
+| `answersVocab() -> Vocabulary` | Returns the cached `Vocabulary` built over `loadAnswers()` — the **one** authoritative label vocab. Reuse it for both train and test. | ✅ done |
 
-> Learning note: this is "which guess shrinks the candidate set fastest." Attempt 1's ML
-> models instead *learn* which answer is most likely given evidence. Both are legitimate;
-> comparing them is instructive.
+**Resolved ✅** — duplication removed (single `answersVocab()` over `answers`), and the
+`Vocabulary` dataclass centralizes word↔index lookup.
+
+**Remaining minor item (optional):** the cached `Vocabulary.index` dict is still mutable and
+shared across calls. Access it only through `indexOf()` / `wordAt()` (never mutate `vocab.index`
+directly) so a caller can't corrupt the shared cache.
+
+**Naming convention:** this project deliberately uses **camelCase** (`loadWords`, `answersVocab`,
+`indexOf`, `wordAt`). Keep it consistent across the package.
+
+**The one rule to remember:** build the `word -> index` mapping **once**, over `loadAnswers()`,
+and reuse it identically for train and test, so labels are stable.
+
+### 6.3 `game.py` — the solve-time driver — ⬜ to do
+
+| Function | Purpose |
+|---|---|
+| `class GameState` | A small mutable container holding history so far, e.g. `guesses: list[(guess, pattern)]`. Handed to the guess-picker so it knows the evidence. |
+| `play_game(secret, guess_picker, max_guesses=6) -> int` | Plays a full round: loop — ask the picker for a guess given the state → compute feedback → append → stop if correct. Returns **guesses used** on a win, or `0` on a loss. The single reusable driver. |
+| *(optional)* `GameState.add_guess(...)` / `is_solved(secret)` | Small helpers to keep `play_game` clean. |
+
+**Key design choice:** `guess_picker` is *any* callable `(GameState) -> guess`. That seam is
+where different solver strategies (ML model, random baseline) plug in later. Build the driver
+to accept a picker, not hardcode a strategy. This file is lower priority than features/dataset
+if you want to reach model training first.
+
+### 6.4 `features.py` — evidence → model input — ⬜ to do
+
+| Function | Purpose |
+|---|---|
+| `encode(probes: list[(guess, pattern)]) -> list[int]` | Convert the evidence into a **fixed-length** numeric vector. Simplest version: concatenate the 5 color codes per probe (1 probe → 5 features, 2 → 10, 3 → 15). |
+| *(optional)* `letter_presence_features(probes) -> list[int]` | Adds a 26-long vector (a–z) marking whether each letter appeared in any probe. Richer signal; try later and compare accuracy. |
+| *(optional)* `make_encoder(n_probes) -> Callable` | A factory returning a configured encoder with a known length, so feature length is consistent. |
+
+**Keep it pure** — same input always gives the same output. No I/O, no randomness.
+
+### 6.5 `dataset.py` — the one file with randomness — ⬜ to do
+
+| Function | Purpose |
+|---|---|
+| `generate(probes: list[str], n_train, n_test, seed=None) -> Dataset` | The data factory. Splits secrets **by word** (no leakage), plays the probes against each secret, encodes features, returns train/test examples. Seeds the RNG for reproducibility. |
+| *(helper)* `_play_probes(secret, probes) -> list[(guess, pattern)]` | Runs the probes against one secret, returns their evidence. |
+| *(helper)* `_split_by_secret(answers, n_train, seed)` | Picks `n_train` distinct secrets for training; the rest are test. Guarantees `train ∩ test == ∅`. |
+| `class Dataset` | Container holding `X_train, y_train, X_test, y_test, vocab` (words + word→index map) so callers get one clean object. |
+
+**Critical guarantee:** the no-leakage split-by-secret logic lives *only* here, and a test
+asserts it. Train examples come only from train-secrets; test examples only from test-secrets.
+
+### 6.6 `entropy.py` — DEFERRED (not doing information gain for now)
+
+Out of scope for the current milestone. If revisited later, it would hold:
+`feedback_distribution(guess, candidates)`, `entropy_of(guess, candidates)`,
+`best_opening(candidates, vocab)`, `best_probe(state, candidates, vocab)`. It would import
+only from `feedback.py` and `vocabulary.py`. **Do not build this yet.**
+
+### 6.7 `__init__.py` — package surface (optional)
+
+Re-exports the public API so attempt scripts can `from wordle import feedback, play_game,
+generate, load_answers` instead of importing each submodule. Pure convenience.
+
+### Dependency graph & suggested build order
+
+```
+feedback.py   (leaf — nothing imports it except others)
+vocabulary.py (leaf)
+features.py   (leaf)
+game.py       → uses feedback.py, vocabulary.py
+dataset.py    → uses feedback.py, vocabulary.py, features.py
+entropy.py    → uses feedback.py, vocabulary.py   [deferred]
+__init__.py   → re-exports the above
+```
+
+**Build order:** ✅ `feedback.py` fixed → ✅ `vocabulary.py` tidied → `features.py` →
+`game.py` → `dataset.py` (+ no-leakage test). Then Attempt 1.
 
 ---
 
 ## 7. Attempt 1 — predefined models (scikit-learn)
 
 ### 7.1 Task
-Train classifiers: `features (evidence) → predicted answer word (index)`.
+Train classifiers: `features (evidence) → predicted answer word (index)` over `answers`.
 
 ### 7.2 Models to try (good spread to compare)
 1. **Multinomial Logistic Regression** (linear, interpretable baseline).
@@ -154,22 +250,21 @@ Train classifiers: `features (evidence) → predicted answer word (index)`.
 5. *Optional:* Gradient Boosting, or scikit-learn's `MLPClassifier`.
 
 ### 7.3 What to compare (this is the "train and compare predictions" goal)
-- **Top-1 accuracy**, reported **per probe count** (1, 2, 3 probes) — you should see
-  accuracy climb as evidence grows.
+- **Top-1 accuracy**, reported **per probe count** (1, 2, 3 probes) — accuracy should climb
+  as evidence grows.
 - A **comparison table** and a **bar/line plot**.
-- Look at *where* models disagree (their predicted answer differs) — a small
-  disagreement table is very instructive.
+- Look at *where* models disagree (predicted answer differs) — a small disagreement table.
 - A **confusion summary** for the best model.
 
 ### 7.4 Turn the classifier into a solver
-The classifier alone outputs a word; to *play Wordle* you use it inside a loop:
+The classifier alone outputs a word; to *play Wordle* you use it inside `play_game`:
 1. Start with the opening probes (their feedback is your initial evidence).
-2. Predict the most likely answer; **guess it**.
+2. Predict the most likely answer; **guess it** (an answer word — always legal).
 3. Feed the new feedback back in as evidence; re-predict.
 4. Repeat until correct or 6 guesses.
 
-Measure **solve rate** (fraction of games won) and **average guesses**, and compare to the
-entropy baseline (§6) and to a trivial baseline (e.g., always guess the same fixed word).
+Measure **solve rate** (fraction of games won) and **average guesses**, compared against a
+trivial baseline (e.g., always guess the same fixed word).
 
 ---
 
@@ -198,8 +293,7 @@ where `Y` is the one-hot label matrix. To get there you will use:
   the gradient is a matrix of partial derivatives).
 
 Implement the gradient **explicitly** (no autodiff). Numerically check it with
-**finite differences** — perturb `W` and confirm `(L(W+ε) − L(W)) / ε ≈ ∇_W L` — this is a
-rigorous, satisfying way to prove your derivation is right.
+**finite differences** — perturb `W` and confirm `(L(W+ε) − L(W)) / ε ≈ ∇_W L`.
 
 ### 8.3 Optimize with gradient descent
 - Update `W ← W − lr · ∇_W L` over epochs/mini-batches.
@@ -207,18 +301,17 @@ rigorous, satisfying way to prove your derivation is right.
 
 ### 8.4 Module-5 convergence check (directional derivative)
 Before trusting gradient descent, verify the math that *justifies* it:
-- Recall the **directional derivative** of `L` at `W` in direction `d` is `∇_W L · d`
-  (inner product of gradient with the direction).
+- The **directional derivative** of `L` at `W` in direction `d` is `∇_W L · d`.
 - The first-order (Taylor) prediction of the loss change after a small step is
   `ΔL ≈ lr · (∇_W L · d)` with `d = −∇_W L`.
 - Check empirically that (a) the directional derivative along `−∇_W L` is **negative**
-  (you're going downhill) and (b) the actual observed `ΔL` tracks the first-order
-  prediction for small step sizes. This is exactly Module 5's point that **the gradient is
-  the direction of steepest ascent**, so `−gradient` is the best descent direction.
+  (going downhill) and (b) the actual observed `ΔL` tracks the first-order prediction for
+  small step sizes. This is Module 5's point that **the gradient is the direction of
+  steepest ascent**, so `−gradient` is the best descent direction.
 
 ### 8.5 Optional stretch: a 1-hidden-layer network (richer Jacobian practice)
 Extend to an MLP: `h = activation(X·W1+b1)`, `logits = h·W2+b2`. Backprop becomes a fuller
-**chain rule / Jacobian** exercise. Compare it to the plain softmax model.
+**chain rule / Jacobian** exercise. Compare to the plain softmax model.
 
 ### 8.6 Compare to Attempt 1
 Run your from-scratch model on the **same test split and probe counts** and report its
@@ -239,33 +332,37 @@ accuracy beside the scikit-learn models. Small differences are expected; explain
 ## 10. Edge cases and failure modes to anticipate
 
 - **Repeated letters in feedback** — get this exactly right; it's the most common bug.
+  Now fixed in `feedback.py` (green-overwrite guard). Lock it in with tests.
 - **Leakage** — split by whole secrets, not by individual rows.
-- **≈2309 classes** — fine on CPU with a few thousand samples, but if training is slow,
+- **≈2315 classes** — fine on CPU with a few thousand samples, but if training is slow,
   reduce the sample size or the candidate set; don't change the test set logic.
 - **Ambiguous evidence** — with 1 probe many answers share a pattern, so accuracy is
   naturally capped. Report per-probe accuracy instead of chasing impossible perfection.
 - **Determinism** — seed RNGs so results are reproducible.
-- **Install issues** — prefer `python3.13`+ if 3.14 wheels are missing (see §3).
+- **Vocab consistency** — build the `word -> index` map once over `loadAnswers()` and reuse it
+  for both train and test, so labels stay stable.
 
 ---
 
 ## 11. Suggested implementation order (for you)
 
-1. Environment + `requirements.txt`.
-2. `data/download_wordlist.py` → commit `data/words.txt`, `data/answers.txt`.
-3. `src/wordle/`: game engine + `feedback()` + tests.
-4. Entropy baseline (probe picker + reference solver).
-5. `src/wordle/`: features + dataset generation + no-leakage split.
-6. Attempt 1: train & compare scikit-learn models; solver loop; report.
-7. Attempt 2: from-scratch softmax + gradient (with finite-difference check) +
+1. Environment + `requirements.txt` — ✅ done.
+2. Word-list data — ✅ done (`src/data/`).
+3. Fix `feedback.py` (repeated-letter bug) + write tests — ✅ bug fixed; tests still to add.
+4. Tidy `vocabulary.py` (dedupe, answers-based vocab, avoid shared mutable dict) — ✅ done.
+5. `features.py`.
+6. `game.py` (optional to defer until the solver loop).
+7. `dataset.py` + no-leakage split test.
+8. Attempt 1: train & compare scikit-learn models; solver loop; report.
+9. Attempt 2: from-scratch softmax + gradient (finite-difference check) +
    directional-derivative convergence check; optional MLP; comparison report.
-8. Update `README.md` with the roadmap and your findings.
+10. Update `README.md` with the roadmap and your findings.
 
 ---
 
 ## 12. Learning checkpoints — you'll know it's working when…
 
-- [ ] `feedback()` passes a repeated-letter test you wrote yourself.
+- [ ] `feedback()` passes a repeated-letter test you wrote yourself (fix the current bug).
 - [ ] Accuracy on the test set **increases** as you go from 1 → 2 → 3 probes.
 - [ ] Your hand-written `∇_W L = Xᵀ(P − Y)/N` matches a finite-difference check.
 - [ ] The loss curve descends and the directional derivative along `−∇` is negative.
@@ -275,3 +372,12 @@ accuracy beside the scikit-learn models. Small differences are expected; explain
 
 Build each piece yourself, run it, and only move on when the checkpoint at that step holds.
 That is the whole point of this project — the learning, not the finished code.
+
+---
+
+## 13. Deferred (not doing now)
+
+- **Information-gain / entropy baseline** — the rule-based "pick the guess with max expected
+  information" approach. Not in scope for the current milestone. If revisited later, its
+  natural home is `src/wordle/entropy.py`, and it would use the full `words` list to search
+  over possible probes and provide a rival solver to compare against the ML approach.
