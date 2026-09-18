@@ -1,3 +1,6 @@
 .venv/
 .DS_Store
 plan.md
+__pycache__/
+.pytest_cache/
+*.pyc
