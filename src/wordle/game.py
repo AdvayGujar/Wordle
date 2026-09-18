@@ -1,4 +1,4 @@
-from feedback import feedback
+from wordle.feedback import feedback
 
 class GameState:
     def __init__(self):
