@@ -1,6 +1,6 @@
 # Attempt 1 — supervised candidate-consistency scoring
 
-**Status:** ✅ complete. Steps 3–10 of `plan.md` §7.5 are implemented and measured; this file records
+**Status:** ✅ complete. The planned Steps 3–10 are implemented and measured; this file records
 what was built, why the task was reframed twice, and what the numbers mean.
 
 **Files**
@@ -191,7 +191,7 @@ AUC:
   default 0.5 threshold: it labels almost nothing positive after three rounds. That is a threshold
   problem; a calibrated cut-off would recover much of the F1. It is also why the solver report
   uses the boosting model.
-- The linear models sit near AUC 0.6–0.7. This is the interaction caveat from `plan.md` §7.3 in
+- The linear models sit near AUC 0.6–0.7. This is the interaction caveat in
   practice: "green at position `i` **and** guessed letter `c` at position `i`" is a joint fact, and
   an additive boundary cannot represent it well. Trees can split on the pair.
 
@@ -243,7 +243,7 @@ AUC:
 
 ## 6. Why the original learning checkpoints had to change
 
-`plan.md` §13 expected "accuracy increases as evidence grows (1 → 5 rounds)". For consistency
+The original checkpoint expected "accuracy increases as evidence grows (1 → 5 rounds)". For consistency
 classification that is not the right expectation: positives become rarer, so F1 can fall while
 AUC stays at 1.0. What *does* grow is the solver's win rate as turns accumulate, and the candidate
 set shrinks. The revised checkpoints are:

@@ -27,7 +27,7 @@ Run it with:
     PYTHONPATH=src .venv/bin/python src/attempt1/trainCompare.py
 
 WHY PYTHONPATH=src: running a file inside src/attempt1/ puts THAT directory on sys.path,
-not src/, so "from wordle..." would fail without it (see plan.md section 6.7).
+not src/, so "from wordle..." would fail without it (see the package import convention).
 """
 
 import os
@@ -104,7 +104,7 @@ def isPaddingBlock(block):
 def decodeRound(block, letterMode = "compact"):
     """Reverse ONE round block back into (guess, pattern).
 
-    The two block layouts (plan.md section 7.3):
+    The two block layouts:
 
         compact:  [c0 c1 c2 c3 c4 | l0 l1 l2 l3 l4]          10 slots, letters 0-25
         onehot:   [c0 c1 c2 c3 c4 | 26 bits | 26 bits | ...] 135 slots, one 1 per letter
@@ -148,7 +148,7 @@ def decodeRounds(vector, maxRounds = 5, letterMode = "compact"):
     WHY the width check comes first: a row with the wrong width means the caller and the
     encoder disagree about maxRounds or letterMode. Decoding it would "work" and quietly
     slice the evidence in the wrong places, which is exactly the train/solve mismatch
-    plan.md section 7.4 warns about.
+    the experiment notes warn about.
 
     WHY "evidence after padding" raises: padding is only ever a tail. A real block that
     appears after a padded one means the padding logic itself is broken, and returning a
@@ -187,8 +187,8 @@ def decodeRounds(vector, maxRounds = 5, letterMode = "compact"):
 def decodeLetterState(vector):
     """Reverse encodeLetterState() into {letter: stateName}.
 
-    WHY this decoder exists: plan.md section 7.3 asks for encoding A (encodeRounds) to be
-    compared against encoding B (encodeLetterState) by measurement. Being able to read B
+    WHY this decoder exists: encoding A (encodeRounds) should be compared against
+    encoding B (encodeLetterState) by measurement. Being able to read B
     back is what lets you see whether it is actually recording "green at position 3" and
     not quietly dropping a fact.
     """
@@ -351,7 +351,7 @@ def checkGeneratedDataset(nTrain = 20, nTest = 5, seed = 42):
 def checkRoundPrefixes(seed = 42):
     """PART C: n rounds of evidence is a PREFIX of n+1 rounds for the same secret.
 
-    WHY this matters now rather than later: plan.md sections 7.5-7.6 plot accuracy against
+    WHY this matters now rather than later: the accuracy-vs-rounds comparison uses
     rounds of evidence, and that comparison is only fair if round 1, round 2, ... describe
     the SAME games cut off at different points. dataset._secretRng() gives one RNG per
     secret precisely to guarantee it; this check makes the assumption explicit before any
@@ -435,7 +435,7 @@ def checkLetterState(secret = "stare", guesses = ("crane", "stout", "slate")):
 # ---------------------------------------------------------------------------
 
 def showTheEvidence():
-    """The dump plan.md step 3 actually asks for: decoded evidence, round by round."""
+    """The dump the sanity-check step asks for: decoded evidence, round by round."""
     secret = "stare"
     guesses = ["crane", "stout", "slate"]
 

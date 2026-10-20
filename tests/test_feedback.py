@@ -11,7 +11,7 @@ from wordle.vocabulary import loadAnswers, loadWords
 
 
 # ---------------------------------------------------------------------------
-# feedback(): the documented cases from plan.md section 6.1
+# feedback(): the documented repeated-letter cases
 # ---------------------------------------------------------------------------
 
 def testFeedbackKnownCases():

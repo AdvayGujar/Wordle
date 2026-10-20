@@ -343,7 +343,7 @@ sightings is genuinely absent.
 - it has no padding concept, which is convenient, but it also cannot tell "two rounds" from
   "one round that happened to say the same thing".
 
-The experiment in §7.3 of `plan.md` is deliberately **measurement, not argument**: implement
+The experiment is deliberately **measurement, not argument**: implement
 both and compare accuracy at the same number of rounds.
 
 ---
@@ -448,8 +448,7 @@ and an infinite loop during data generation looks like a hang. The limit is
 `50 * count + 100` calls; exceeding it raises `ValueError`.
 
 The default is **not** a perfect imitation of the solver: uniform random guesses are usually not
-consistent with earlier feedback, whereas the solver only plays consistent words. `plan.md`
-§7.4 documents the residual mismatch and the on-policy upgrade path.
+consistent with earlier feedback, whereas the solver only plays consistent words. The experiment notes document the residual mismatch and the on-policy upgrade path.
 
 ### 6.7 `generateVariable(...)` — varied-guess, secret-disjoint rows
 
@@ -637,7 +636,7 @@ directory — not `src/` — on the path.
   `len(.history)`.
 - **Repeated guesses in training.** The solver masks them; `_buildEvidence` rejects them.
 - **Assuming random training evidence is exactly the solver's distribution.** It is close in
-  letter/colour space but looser in consistency; see `plan.md` §7.4.
+  letter/colour space but looser in consistency; see the experiment notes.
 - **Pooling 1..5 round datasets and assuming 5× the distinct secrets.** It is the same secrets at
   five prefix lengths.
 - **Mutating `answersVocab().index` or `GameState.guesses`.** Both are shared or internal; treat

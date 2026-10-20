@@ -54,7 +54,7 @@ class Dataset:
         """Expected number of features per row, derived from the stored recipe.
 
         WHY: the solver asserts its rebuilt vectors against this before predicting. A
-        train/solve width mismatch is the quiet failure mode plan.md section 7.4 warns
+        train/solve width mismatch is the quiet failure mode the experiment notes warn
         about, so make the expected width computable instead of remembered.
         """
         if self.encoder == "colour":
@@ -144,7 +144,7 @@ def _buildEvidence(secret, rng, count, guessPicker):
 
     WHY the default draws uniformly from answers: it is simple, reproducible, and keeps
     the generator honest about what "random training evidence" means (see the distribution
-    note in plan.md section 7.4). It is NOT a perfect imitation of the solver, which only
+    note in the experiment documentation). It is NOT a perfect imitation of the solver, which only
     plays feedback-consistent words; a custom picker can close that gap.
 
     WHY a real solver never repeats a guess: the solver masks words already played, so
@@ -195,7 +195,7 @@ def generateVariable(nRounds, nTrain, nTest, seed = None, maxRounds = 5,
 
     WHY this is not a perfect imitation: default guesses are drawn uniformly from answers,
     while the solver only plays words consistent with the feedback. That residual mismatch
-    is documented in plan.md section 7.4; a custom guessPicker can narrow it.
+    is documented in the experiment notes; a custom guessPicker can narrow it.
 
     WHY maxRounds: every row is padded to maxRounds * roundBlockSize(letterMode), so one
     model can be asked at any point in the game. nRounds controls how much evidence a

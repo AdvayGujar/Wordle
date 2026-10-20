@@ -131,7 +131,7 @@ def encodeRounds(guesses, maxRounds = 5, letterMode = "compact"):
 def encodeLetterState(guesses):
     """Aggregate every round into one fixed-size letter-state vector (26 x 8 = 208).
 
-    WHY: this is the rival to encodeRounds, and plan.md 7.3 asks for the comparison to be
+    WHY: this is the rival to encodeRounds, and the comparison should be
     settled by measurement rather than argument. Instead of storing rounds side by side, it
     folds all evidence into per-letter facts ("eliminated", "present somewhere", "green at
     position p"). The length is constant with no padding at all, and the information still

@@ -135,7 +135,7 @@ def testPlayGamePassesGrowingEvidenceToThePicker():
 
 
 def testPlayGameProbesThenModelFlow():
-    """The phase pattern from plan.md 7.4: fixed probes, then a real guess."""
+    """The phase pattern: fixed probes, then a real guess."""
     probes = ["crane", "slate"]
     phases = []
 
