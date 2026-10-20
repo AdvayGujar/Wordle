@@ -1,12 +1,17 @@
 """Attempt 1 solver: drive the candidate-consistency model through real games.
 
-TWO MODES
+MODES
+  interactive - you type guess 1, the model plays the rest.
+  auto        - evaluate the model and baselines over many games.
+  advise      - you type every guess AND its colours; the model suggests the next best word.
+                This is the human-in-the-loop mode: the model never sees the secret, only the
+                evidence you enter.
+
+TWO PICKER POLICIES
   masked     - the rule-based candidate filter keeps only feedback-consistent words, then the
-               model chooses among them. This is the safe solver: it can never waste a guess
-               on a word the evidence has already eliminated.
-  model-only - the model scores all 2,315 answers with no rule mask. This is the honest test
-               of what the classifier learned: if it has not learned consistency, it will
-               sometimes choose an impossible word.
+               model chooses among them. The safe solver.
+  model-only - the model scores all 2,315 answers with no rule mask. The honest test of what
+               the classifier learned.
 
 WHY BOTH: the posterior over consistent candidates is uniform, so the model cannot rank the
 true secret above the others. `masked` therefore measures the rules; `model-only` measures
@@ -14,6 +19,9 @@ the learned consistency checker. Report both instead of hiding the distinction.
 
 Run interactively:
     PYTHONPATH=src .venv/bin/python src/attempt1/play.py
+
+Ask for a suggestion after each guess:
+    PYTHONPATH=src .venv/bin/python src/attempt1/play.py --advise
 
 Run an evaluation:
     PYTHONPATH=src .venv/bin/python src/attempt1/play.py --auto --games 400
@@ -41,6 +49,41 @@ from wordle.vocabulary import loadAnswers, loadWords
 MAX_GUESSES = 6
 SQUARES = {0: "⬜", 1: "🟨", 2: "🟩"}
 COLOR_NAMES = ("grey", "yellow", "green")
+
+# What the advisor accepts for one position. Letters are the compact form; words and digits
+# are the friendly forms. Grey is both "grey" and the American "gray".
+COLOR_CODES = {
+    "g": 2, "green": 2, "2": 2, "🟩": 2,
+    "y": 1, "yellow": 1, "1": 1, "🟨": 1,
+    "x": 0, "grey": 0, "gray": 0, "0": 0, "⬜": 0,
+}
+
+
+def parsePattern(raw):
+    """Parse five colours entered by the advisor user.
+
+    Accepts compact strings ("gyxgy", "21200"), separate tokens ("g y x g y", "2 1 0 0 2"),
+    and words ("green yellow grey grey green"). Raises ValueError with the accepted forms.
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("enter five colours, e.g. GYXXG or 2 1 0 0 2")
+
+    cleaned = raw.strip().lower().replace(",", " ")
+    tokens = cleaned.split()
+
+    if len(tokens) == 1 and tokens[0] not in COLOR_CODES:
+        tokens = list(tokens[0])
+
+    if len(tokens) != 5:
+        raise ValueError("need exactly 5 colours, got %d (e.g. GYXXG or 2 1 0 0 2)" % len(tokens))
+
+    pattern = []
+    for token in tokens:
+        if token not in COLOR_CODES:
+            raise ValueError("unknown colour %r; use G/Y/X, 2/1/0, or green/yellow/grey" % token)
+        pattern.append(COLOR_CODES[token])
+
+    return tuple(pattern)
 
 
 # ---------------------------------------------------------------------------
@@ -82,15 +125,17 @@ def pickWithModel(model, history, mask = True, firstGuess = None):
     return pool[int(np.argmax(scores))]
 
 
-def makeModelPicker(artifact, firstGuess, mask, interactiveFirst = False):
-    model = artifact["model"]
-    width = artifact["featureWidth"]
-
-    if width != FEATURE_WIDTH:
+def modelFromArtifact(artifact):
+    if artifact["featureWidth"] != FEATURE_WIDTH:
         raise ValueError(
             "model was trained with %d features, but this build produces %d"
-            % (width, FEATURE_WIDTH)
+            % (artifact["featureWidth"], FEATURE_WIDTH)
         )
+    return artifact["model"]
+
+
+def makeModelPicker(artifact, firstGuess, mask, interactiveFirst = False):
+    model = modelFromArtifact(artifact)
 
     def picker(history):
         if not history:
@@ -237,15 +282,86 @@ def evaluateAll(artifact, firstGuess, games, modelOnly):
 # Interactive
 # ---------------------------------------------------------------------------
 
-def promptFirstGuess():
+def promptGuess(history, label = "Your guess"):
+    played = {guess for guess, _ in history}
+
     while True:
-        raw = input("Your first guess (5 letters, or 'quit'): ").strip().lower()
+        raw = input("%s (5 letters, or 'quit'): " % label).strip().lower()
         if raw in ("quit", "exit", "q"):
             raise SystemExit("bye")
         try:
-            return checkGuess(raw)
+            guess = checkGuess(raw)
         except ValueError as error:
             print("  %s" % error)
+            continue
+        if guess in played:
+            print("  %s was already played; a useful solver never repeats a guess." % guess)
+            continue
+        return guess
+
+
+def promptFirstGuess():
+    return promptGuess([], "Your first guess")
+
+
+def promptPattern(guess):
+    while True:
+        raw = input(
+            "Colours for %s (G/Y/X per position, or e.g. 2 1 0 0 2): " % guess.upper()
+        )
+        if raw.strip().lower() in ("quit", "exit", "q"):
+            raise SystemExit("bye")
+        try:
+            return parsePattern(raw)
+        except ValueError as error:
+            print("  %s" % error)
+
+
+def advise(artifact, modelOnly):
+    """Human types every guess and its colours; the model suggests the next word.
+
+    This is the only mode where the model never sees the secret at all: it gets exactly the
+    history the human enters. It is therefore the most honest interactive demonstration.
+    """
+    model = modelFromArtifact(artifact)
+    answers = loadAnswers()
+    history = []
+
+    print("=" * 78)
+    print("ADVISOR - you enter each guess and its colours; the model suggests the next word")
+    print("=" * 78)
+    print("  Enter colours position by position, e.g. GYXXG or 2 1 0 0 2.")
+    print("  Type 'quit' at any prompt to stop.")
+    print("  Model mode: %s" % ("model-only (no rule mask)" if modelOnly else "masked"))
+    print()
+
+    while True:
+        guess = promptGuess(history, "Your guess")
+        pattern = promptPattern(guess)
+        trial = history + [(guess, pattern)]
+
+        if not candidatesMatching(trial, answers):
+            print("  No answer is consistent with that guess + colours. Check them and retry.")
+            continue
+
+        history.append((guess, pattern))
+        render(history)
+
+        if all(color == 2 for color in pattern):
+            print("\n  SOLVED - all five letters are green.")
+            return
+
+        if len(history) >= MAX_GUESSES:
+            print("\n  That was guess 6; there is no next turn.")
+            return
+
+        consistent = candidatesMatching(history, answers)
+        suggestion = pickWithModel(model, history, mask = not modelOnly)
+        print("\n  Consistent answers left: %d" % len(consistent))
+        if len(consistent) == 1:
+            print("  Only one answer remains.")
+        print("  Next best word: %s" % suggestion.upper())
+        print()
 
 
 def render(history, secret = None):
@@ -292,7 +408,11 @@ def playInteractive(artifact, firstGuess, modelOnly):
 
 def parseArgs():
     parser = argparse.ArgumentParser(description = "Attempt 1 Wordle solver")
-    parser.add_argument("--auto", action = "store_true", help = "evaluate instead of playing interactively")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--auto", action = "store_true",
+                      help = "evaluate instead of playing interactively")
+    mode.add_argument("--advise", action = "store_true",
+                      help = "enter every guess + its colours; the model suggests the next word")
     parser.add_argument("--first", default = "crane", help = "fixed first guess (default: crane)")
     parser.add_argument("--games", type = int, default = 400, help = "number of evaluation games")
     parser.add_argument("--model-only", action = "store_true",
@@ -302,13 +422,18 @@ def parseArgs():
 
 def main():
     args = parseArgs()
-    firstGuess = checkGuess(args.first.strip().lower())
 
     try:
         artifact = loadArtifact()
     except FileNotFoundError as error:
         print(error)
         return 1
+
+    if args.advise:
+        advise(artifact, args.model_only)
+        return 0
+
+    firstGuess = checkGuess(args.first.strip().lower())
 
     if args.auto:
         evaluateAll(artifact, firstGuess, args.games, args.model_only)

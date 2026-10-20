@@ -10,7 +10,7 @@ what was built, why the task was reframed twice, and what the numbers mean.
 | `features.py` | Candidate-relative feature builder (250 features, no label leakage) |
 | `common.py` | Data generation, model registry, metrics, artifact persistence |
 | `trainCompare.py` | Steps 3–9: baselines, training, tables, plot, disagreement, mistakes |
-| `play.py` | Step 10: masked / model-only solver, interactive and `--auto` modes |
+| `play.py` | Step 10: masked / model-only solver, interactive, `--auto`, and `--advise` modes |
 
 **Artifacts produced**
 
@@ -67,6 +67,7 @@ flowchart LR
         PICK["pickWithModel<br/>score candidate pool<br/>masked: candidatesMatching<br/>never repeat a played word"]
         TURN["feedback(guess, secret)<br/>GameState.addGuess"]
         BOARD["render board<br/>win rate / guess counts"]
+        ADVISE["--advise mode<br/>human enters guess + colours<br/>model suggests next word"]
         BASE["baselines<br/>random-legal / random-consistent<br/>fixed-word / fixed-opener + random-consistent"]
     end
 
@@ -100,6 +101,11 @@ flowchart LR
     PICK --> TURN
     TURN -->|next turn| PICK
     TURN -->|won / 6 guesses| BOARD
+    ART --> ADVISE
+    FEEDBACK --> ADVISE
+    ADVISE --> PICK
+    PICK -.->|suggested word| ADVISE
+    ADVISE -->|display history| BOARD
     BASE --> BOARD
     GAME -.-> TURN
     ENC -.->|step-3 encoding checks| TABLE
@@ -383,7 +389,30 @@ PYTHONPATH=src .venv/bin/python src/attempt1/play.py --auto --games 400
 
 # no rule mask: the honest test of what the model learned
 PYTHONPATH=src .venv/bin/python src/attempt1/play.py --auto --model-only
+
+# advisor: you enter every guess AND its colours; the model suggests the next word
+PYTHONPATH=src .venv/bin/python src/attempt1/play.py --advise
 ```
+
+### Advisor mode
+
+`--advise` is the human-in-the-loop mode. You type a guess, then its five colours position by
+position; the advisor validates the move against the evidence, shows the remaining consistent
+candidate count, and prints the model's next recommended word. It never sees the secret — only the
+history you enter.
+
+Accepted colour forms:
+
+```text
+GYXGG
+2 1 0 0 2
+green yellow grey grey green
+⬜ 🟨 🟩 ⬜ 🟩
+```
+
+An inconsistent guess/colour pair (no answer left) is rejected and not added to the history, so a
+typo cannot poison the rest of the session. Type `quit` at any prompt to stop. This is the mode to
+use when you want to play a real game yourself but still get a model suggestion each turn.
 
 Runtime on this machine: full training/evaluation about 1–2 minutes; the solver sweep about a
 minute.

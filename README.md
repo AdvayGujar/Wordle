@@ -67,7 +67,7 @@ src/
     ├── trainCompare.py   # baselines, training, tables, plot, analysis
     ├── play.py           # interactive / --auto solver
     └── attempt1.md       # full Attempt-1 write-up
-tests/                    # 162 tests
+tests/                    # 174 tests
 ```
 
 ## Setup
@@ -101,6 +101,15 @@ Play interactively — you type the first guess, the model plays the rest:
 ```bash
 PYTHONPATH=src .venv/bin/python src/attempt1/play.py
 ```
+
+Ask for the next best word while you play — you enter each guess and its colours:
+
+```bash
+PYTHONPATH=src .venv/bin/python src/attempt1/play.py --advise
+```
+
+Colours can be entered as `GYXXG`, `2 1 0 0 2`, or `green yellow grey grey green`. The advisor
+validates each move against the evidence and prints the model's next recommended word.
 
 Evaluate the solver and baselines over 400 games:
 
