@@ -64,6 +64,16 @@ def testFeatureLengthTracksTheNumberOfProbes():
     assert {len(r) for r in three.xTrain} == {15}
 
 
+def testDatasetWidthDescribesItsOwnRows():
+    """Legacy colour-only rows are 5 x probes, not maxRounds x roundBlockSize."""
+    one = generate(["crane"], 50, 20, SEED)
+    two = generate(["crane", "slate"], 50, 20, SEED)
+    assert one.width == 5
+    assert two.width == 10
+    assert all(len(row) == one.width for row in one.xTrain + one.xTest)
+    assert all(len(row) == two.width for row in two.xTrain + two.xTest)
+
+
 def testFeaturesContainOnlyValidCodes(dataset):
     for row in dataset.xTrain + dataset.xTest:
         assert all(code in (-1, 0, 1, 2) for code in row)

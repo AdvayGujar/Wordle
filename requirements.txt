@@ -15,6 +15,7 @@ pluggy==1.6.0
 Pygments==2.21.0
 pyparsing==3.3.2
 pytest==8.4.2
+pytest-timeout==2.4.0
 python-dateutil==2.9.0.post0
 pytz==2026.3.post1
 scikit-learn==1.6.1

@@ -1,6 +1,10 @@
 .venv/
 .DS_Store
-plan.md
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# Generated Attempt 1 artifacts (reproducible via trainCompare.py / play.py)
+src/attempt1/model.joblib
+src/attempt1/results.json
+src/attempt1/playResults.json
