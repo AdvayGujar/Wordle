@@ -23,92 +23,99 @@ what was built, why the task was reframed twice, and what the numbers mean.
 
 ## Architecture at a glance
 
-The diagram shows every component of Attempt 1 and the two paths through it: **training** (left
-to right, ending at the saved model) and **solving** (bottom, reusing the saved model and the exact
-feedback rules).
+The diagrams show every component of Attempt 1 and the paths through it: **training** (ending at
+the saved model), **solving** (interactive or automatic), and **advising** (human enters every
+guess, the model suggests the next one).
 
-```mermaid
-flowchart LR
-    subgraph DATA["Data files"]
-        WORDS["src/data/words.txt<br/>14,855 legal guesses"]
-        ANSWERS["src/data/answers.txt<br/>2,315 possible secrets"]
-    end
+**Training path**
 
-    subgraph CORE["src/wordle — shared core"]
-        VOCAB["vocabulary.py<br/>loadWords / loadAnswers<br/>answersVocab"]
-        FEEDBACK["feedback.py<br/>feedback(guess, secret)<br/>candidatesMatching(evidence, vocab)"]
-        GAME["game.py<br/>GameState<br/>checkGuess<br/>playGameDetailed"]
-        ENC["features.py<br/>encodeRounds / encodeLetterState<br/>legacy encode"]
-        DATASET["dataset.py<br/>splitSecrets / selectTestSecrets<br/>evidenceFor<br/>generateVariable / generateClassComplete"]
-    end
+```
+src/data/words.txt  ───> loadWords()              14,855 legal guesses
+src/data/answers.txt ──> loadAnswers()             2,315 possible secrets
+                              │
+                              └──> answersVocab()  word <-> label index
+                                       │
+                          splitSecrets(600, seed=42)
+                              │                          │
+                    trainSecrets (600)          testSecrets (400, disjoint)
+                              │                          │
+              evidenceFor(secret, n=1..5)     evidenceFor(secret, n=1..5)
+              same games, prefix lengths      fresh evidence sequences
+                              │                          │
+                   candidatesMatching(evidence)          │
+                     │                │                  │
+              positives          negatives               │
+              (consistent)       (sampled)               │
+                     └───────┬────────┘                  │
+                             v                           │
+              candidateFeatures(evidence, word)          │
+                  250 features = 5 rounds x 50           │
+                             │                           │
+                             v                           v
+                  X (85,350 x 250), y in {0,1}      test candidate rows
+                             │                           │
+                             v                           │
+                model.fit: HGB / RF / LR / SVM           │
+                             │                           │
+              ┌──────────────┼──────────────┐            │
+              v              v              v            │
+       consistency      state-level     model.joblib    │
+       F1 / AUC         top-k scores    + metrics       │
+              │              │                           │
+              └──────┬───────┘                           │
+                     v                                   │
+              results.json / accuracy.png <─────────────┘
+```
 
-    subgraph PREP["src/attempt1 — data preparation"]
-        SPLIT["splitSecrets(600, seed=42)<br/>trainSecrets: 600<br/>testSecrets: 400, disjoint"]
-        TRAIN_EV["training evidence<br/>evidenceFor(secret, n)<br/>n = 1..5, same games as prefixes"]
-        TEST_EV["test evidence<br/>same 400 secrets<br/>fresh sequences"]
-        CAND["candidateRows<br/>positives: candidatesMatching(evidence)<br/>negatives: sampled other answers"]
-        FEAT["candidateFeatures<br/>250 = 5 rounds x 50<br/>candidate-relative, no feedback label"]
-        XY["training matrix<br/>X: 85,350 x 250 float64<br/>y: 0/1, positive rate 0.297"]
-        TEST_ROWS["test candidate rows<br/>20 positives + 20 negatives<br/>per state, per round"]
-    end
+**Solve path — `play.py` (interactive or `--auto`)**
 
-    subgraph TRAIN["Model comparison — trainCompare.py"]
-        REG["modelFactories<br/>HistGradientBoosting / RandomForest<br/>LogisticRegression / LinearSVC"]
-        FIT["fitModel<br/>one binary model, pooled rounds"]
-        METRICS["consistencyMetrics<br/>F1 / AUC / balanced accuracy<br/>threshold per model"]
-        TABLE["comparison table + accuracy.png<br/>disagreement table<br/>common false positives/negatives"]
-        STATE["state-level scoring<br/>score all 2,315 answers<br/>top-1-consistent / top-1-secret / top-5"]
-        ART["model.joblib<br/>best model + feature width<br/>+ metrics"]
-        RESULTS["results.json"]
-    end
+```
+                         model.joblib
+                              │
+user first guess ─────> history = []
+or --first crane              │
+                              v
+                       pickWithModel(history)
+                              │
+              ┌───────────────┼────────────────┐
+              v               v                v
+        masked:          model-only:      never repeat
+        candidatesMatching  score all      a played word
+        then score pool     2,315 answers
+              └───────────────┼────────────────┘
+                              v
+                       suggested guess
+                              │
+                              v
+                   feedback(guess, secret)
+                              │
+                              v
+                   history += (guess, pattern)
+                              │
+                              └──────> next turn (max 5 rounds)
+                              │
+                              v
+                         GameResult
+```
 
-    subgraph SOLVE["Solver — play.py"]
-        FIRST["first guess<br/>human prompt or --first crane"]
-        PICK["pickWithModel<br/>score candidate pool<br/>masked: candidatesMatching<br/>never repeat a played word"]
-        TURN["feedback(guess, secret)<br/>GameState.addGuess"]
-        BOARD["render board<br/>win rate / guess counts"]
-        ADVISE["--advise mode<br/>human enters guess + colours<br/>model suggests next word"]
-        BASE["baselines<br/>random-legal / random-consistent<br/>fixed-word / fixed-opener + random-consistent"]
-    end
+**Advisor path — `play.py --advise`**
 
-    WORDS --> VOCAB
-    ANSWERS --> VOCAB
-    VOCAB --> FEEDBACK
-    VOCAB --> DATASET
-    DATASET --> SPLIT
-    FEEDBACK --> TRAIN_EV
-    SPLIT --> TRAIN_EV
-    SPLIT --> TEST_EV
-    TRAIN_EV --> CAND
-    FEEDBACK --> CAND
-    CAND --> FEAT
-    FEAT --> XY
-    XY --> REG
-    REG --> FIT
-    FIT --> METRICS
-    FIT --> STATE
-    METRICS --> TABLE
-    METRICS --> ART
-    STATE --> TABLE
-    ART --> RESULTS
-    TEST_EV --> TEST_ROWS
-    TEST_ROWS --> METRICS
-    TEST_EV --> STATE
-
-    FIRST --> PICK
-    ART --> PICK
-    FEEDBACK --> PICK
-    PICK --> TURN
-    TURN -->|next turn| PICK
-    TURN -->|won / 6 guesses| BOARD
-    ART --> ADVISE
-    FEEDBACK --> ADVISE
-    ADVISE --> PICK
-    PICK -.->|suggested word| ADVISE
-    ADVISE -->|display history| BOARD
-    BASE --> BOARD
-    GAME -.-> TURN
-    ENC -.->|step-3 encoding checks| TABLE
+```
+human guess + colours ──> parsePattern()
+                               │
+                               v
+                candidatesMatching(history + new round)
+                     │                          │
+                  empty                     non-empty
+                     │                          │
+              reject + retry                   v
+                                       history += new round
+                                                │
+                                                v
+                                         pickWithModel(history)
+                                                │
+                                                v
+                                         next best word
 ```
 
 **How to read it.**
