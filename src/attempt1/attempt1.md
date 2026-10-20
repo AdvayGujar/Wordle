@@ -21,6 +21,119 @@ what was built, why the task was reframed twice, and what the numbers mean.
 
 ---
 
+## Architecture at a glance
+
+The diagram shows every component of Attempt 1 and the two paths through it: **training** (left
+to right, ending at the saved model) and **solving** (bottom, reusing the saved model and the exact
+feedback rules).
+
+```mermaid
+flowchart LR
+    subgraph DATA["Data files"]
+        WORDS["src/data/words.txt<br/>14,855 legal guesses"]
+        ANSWERS["src/data/answers.txt<br/>2,315 possible secrets"]
+    end
+
+    subgraph CORE["src/wordle — shared core"]
+        VOCAB["vocabulary.py<br/>loadWords / loadAnswers<br/>answersVocab"]
+        FEEDBACK["feedback.py<br/>feedback(guess, secret)<br/>candidatesMatching(evidence, vocab)"]
+        GAME["game.py<br/>GameState<br/>checkGuess<br/>playGameDetailed"]
+        ENC["features.py<br/>encodeRounds / encodeLetterState<br/>legacy encode"]
+        DATASET["dataset.py<br/>splitSecrets / selectTestSecrets<br/>evidenceFor<br/>generateVariable / generateClassComplete"]
+    end
+
+    subgraph PREP["src/attempt1 — data preparation"]
+        SPLIT["splitSecrets(600, seed=42)<br/>trainSecrets: 600<br/>testSecrets: 400, disjoint"]
+        TRAIN_EV["training evidence<br/>evidenceFor(secret, n)<br/>n = 1..5, same games as prefixes"]
+        TEST_EV["test evidence<br/>same 400 secrets<br/>fresh sequences"]
+        CAND["candidateRows<br/>positives: candidatesMatching(evidence)<br/>negatives: sampled other answers"]
+        FEAT["candidateFeatures<br/>250 = 5 rounds x 50<br/>candidate-relative, no feedback label"]
+        XY["training matrix<br/>X: 85,350 x 250 float64<br/>y: 0/1, positive rate 0.297"]
+        TEST_ROWS["test candidate rows<br/>20 positives + 20 negatives<br/>per state, per round"]
+    end
+
+    subgraph TRAIN["Model comparison — trainCompare.py"]
+        REG["modelFactories<br/>HistGradientBoosting / RandomForest<br/>LogisticRegression / LinearSVC"]
+        FIT["fitModel<br/>one binary model, pooled rounds"]
+        METRICS["consistencyMetrics<br/>F1 / AUC / balanced accuracy<br/>threshold per model"]
+        TABLE["comparison table + accuracy.png<br/>disagreement table<br/>common false positives/negatives"]
+        STATE["state-level scoring<br/>score all 2,315 answers<br/>top-1-consistent / top-1-secret / top-5"]
+        ART["model.joblib<br/>best model + feature width<br/>+ metrics"]
+        RESULTS["results.json"]
+    end
+
+    subgraph SOLVE["Solver — play.py"]
+        FIRST["first guess<br/>human prompt or --first crane"]
+        PICK["pickWithModel<br/>score candidate pool<br/>masked: candidatesMatching<br/>never repeat a played word"]
+        TURN["feedback(guess, secret)<br/>GameState.addGuess"]
+        BOARD["render board<br/>win rate / guess counts"]
+        BASE["baselines<br/>random-legal / random-consistent<br/>fixed-word / fixed-opener + random-consistent"]
+    end
+
+    WORDS --> VOCAB
+    ANSWERS --> VOCAB
+    VOCAB --> FEEDBACK
+    VOCAB --> DATASET
+    DATASET --> SPLIT
+    FEEDBACK --> TRAIN_EV
+    SPLIT --> TRAIN_EV
+    SPLIT --> TEST_EV
+    TRAIN_EV --> CAND
+    FEEDBACK --> CAND
+    CAND --> FEAT
+    FEAT --> XY
+    XY --> REG
+    REG --> FIT
+    FIT --> METRICS
+    FIT --> STATE
+    METRICS --> TABLE
+    METRICS --> ART
+    STATE --> TABLE
+    ART --> RESULTS
+    TEST_EV --> TEST_ROWS
+    TEST_ROWS --> METRICS
+    TEST_EV --> STATE
+
+    FIRST --> PICK
+    ART --> PICK
+    FEEDBACK --> PICK
+    PICK --> TURN
+    TURN -->|next turn| PICK
+    TURN -->|won / 6 guesses| BOARD
+    BASE --> BOARD
+    GAME -.-> TURN
+    ENC -.->|step-3 encoding checks| TABLE
+```
+
+**How to read it.**
+
+- **Data → core:** `vocabulary.py` loads both word lists; `feedback.py` is the only source of truth
+  for colours and is reused by every later stage.
+- **Training path:** 600 disjoint training secrets → 1–5 rounds of evidence → sampled
+  consistent/inconsistent candidate pairs → 250 features each → one pooled binary model.
+- **Evaluation path:** the same generator runs on 400 disjoint test secrets with fresh evidence;
+  per-row F1/AUC and per-state “can it find a consistent word?” are reported separately.
+- **Solve path:** `play.py` loads the saved model, scores a candidate pool, applies the exact
+  `candidatesMatching` rule when masked, and feeds the resulting feedback back into the history.
+- **Why both a model and a rule mask exist:** the model learns consistency; the mask guarantees the
+  solver never plays a word the evidence has eliminated. The two are reported separately
+  (model-only vs masked).
+
+**Data shapes at each boundary:**
+
+| Boundary | Shape / type | Meaning |
+|---|---|---|
+| Word lists | `tuple[str]` | 14,855 legal guesses; 2,315 answers |
+| Evidence | `list[tuple[str, tuple[int, ...]]]` | `(guess, pattern)` in play order |
+| Candidate row | `list[float]` / `np.ndarray` of 250 | one `(evidence, candidate)` pair |
+| Training matrix `X` | `(85,350, 250)` float64 | pooled rounds 1–5 |
+| Training labels `y` | `(85,350,)` int | `1` = consistent, `0` = inconsistent |
+| Model score | `(n_candidates,)` float | higher = more likely consistent |
+| Solver history | at most 5 `(guess, pattern)` pairs | input to the next candidate scoring step |
+| Game result | `GameResult(won, guessesUsed, history, secret)` | win / loss and board |
+
+---
+
 ## 1. Why this is not answer classification
 
 The original plan trained a 2,315-way classifier to predict the secret word from evidence. That
