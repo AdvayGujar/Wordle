@@ -11,6 +11,7 @@ training scripts and solvers can reuse. It contains no ML code, no plotting, and
 src/wordle/
 ├── __init__.py    # package marker
 ├── feedback.py    # the rules: colors, candidate filtering
+├── feedbackTable.py # cached 2315x2315 feedback codes + fast filtering
 ├── vocabulary.py  # word lists + word <-> index mapping
 ├── game.py        # GameState, checkGuess, the play loop
 ├── features.py    # evidence -> numeric feature vector
@@ -118,8 +119,32 @@ Contract:
 - returns a new list; the caller may mutate it.
 
 Cost: `O(|vocab| * |constraints| * 5)`. That is fine for 2,315 answers and at most five
-constraints, but it is the hot path of `play.py` and the future RL environment, so a
-precomputed feedback table is the natural optimisation later.
+constraints, but it is the hot path of `play.py` and the RL environment, so every
+(answer, answer) pair is precomputed in `feedbackTable.py` (§2.3).
+
+### 2.3 `feedbackTable.py` — the same rules, precomputed
+
+`feedback(guess, secret)` is pure Python. Attempt 2's RL loop calls it millions of times, so the
+module precomputes all 2,315 × 2,315 answer/answer pairs as one `uint8` code per pair, where a
+code is the pattern read as a base-3 number (position 0 most significant, `0..242`).
+
+Contract:
+
+- `patternCode(pattern)` / `decodePattern(code)` convert between a 5-colour pattern and its code;
+  both reject malformed input with `ValueError`.
+- `feedbackTable()` returns a `(2315, 2315)` `uint8` array, **row = guess index, column = secret
+  index**. It is built lazily on first call and cached for the process (~1.2 s, ~5.4 MB).
+- `feedbackCode(guess, secret)` uses the table when both words are answers, and falls back to
+  `feedback()` otherwise.
+- `candidatesMatchingFast(constraints, vocab=None)` returns **exactly** what
+  `candidatesMatching(constraints, vocab or loadAnswers())` returns, in the same order. Guesses
+  or vocabulary words that are legal but not answers still work through a per-word fallback.
+- the original `feedback()` and `candidatesMatching()` are unchanged; this module only
+  accelerates callers that opt in.
+
+Computation is lazy, so importing the core stays cheap. A table cell must always equal
+`patternCode(feedback(guess, secret))`; `tests/test_feedbackTable.py` checks whole columns,
+including repeated-letter secrets.
 
 ---
 
@@ -676,8 +701,8 @@ directory — not `src/` — on the path.
 - **Entropy / information gain:** deferred; its natural home is `src/wordle/entropy.py`, and it
   would use `loadWords()` for probe search.
 - **RL environment (Attempt 2):** reuse `encodeRounds`, the answer-index action space, and
-  `candidatesMatching`. A precomputed 2,315 × 2,315 `uint8` feedback table is the biggest
-  available speedup.
+  `candidatesMatchingFast` from `feedbackTable.py` (or `candidatesMatching` for a slow reference).
+  The 2,315 × 2,315 table is already built and cached.
 
 ---
 
@@ -686,6 +711,7 @@ directory — not `src/` — on the path.
 | File | What it pins |
 |---|---|
 | `tests/test_feedback.py` | the three documented cases, repeated-letter rules, `candidatesMatching` |
+| `tests/test_feedbackTable.py` | pattern codes round-trip, table columns match `feedback()`, fast filter matches `candidatesMatching` |
 | `tests/test_vocabulary.py` | list sizes (14,855 / 2,315), caching, word↔index round-trip |
 | `tests/test_game.py` | `GameState`, `playGame`, both historical bugs, picker contract |
 | `tests/test_features.py` | legacy `encode` only: length, `-1` padding, purity, colour-only behaviour |

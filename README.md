@@ -47,6 +47,10 @@ The learned model recovers the consistency rule, but it does **not** beat the ru
 filter. That is expected: the posterior is uniform over consistent candidates. The remaining
 headroom is strategy, not classification.
 
+Attempt 2 (reinforcement learning) has not started. Its pre-flight is in place: the RL stack is
+pinned in `requirements.txt`, and `feedbackTable.py` precomputes every answer/answer feedback pair
+once (~5 MB, built lazily) so RL steps are array lookups instead of Python calls.
+
 ![Consistency skill vs rounds](src/attempt1/accuracy.png)
 
 ## Repository layout
@@ -56,6 +60,7 @@ src/
 ├── data/                 # words.txt (14,855 legal guesses), answers.txt (2,315 secrets)
 ├── wordle/               # shared core
 │   ├── feedback.py       # feedback(), candidatesMatching()
+│   ├── feedbackTable.py  # cached 2315x2315 feedback table + fast candidate filter
 │   ├── vocabulary.py     # cached word lists + stable word <-> index mapping
 │   ├── game.py           # GameState, checkGuess, playGameDetailed
 │   ├── features.py       # legacy encode, encodeRounds, encodeLetterState
@@ -67,12 +72,13 @@ src/
     ├── trainCompare.py   # baselines, training, tables, plot, analysis
     ├── play.py           # interactive / --auto solver
     └── attempt1.md       # full Attempt-1 write-up
-tests/                    # 174 tests
+tests/                    # 196 tests
 ```
 
 ## Setup
 
-Python 3.9 virtual environment with the pinned stack in `requirements.txt`:
+Python 3.9 virtual environment with the pinned stack in `requirements.txt`, which includes the
+Attempt-2 RL stack (`torch`, `gymnasium`):
 
 ```bash
 python3 -m venv .venv
@@ -132,6 +138,9 @@ tracked.
 - `feedback()` is pure and handles repeated letters with a green-first, yellow-second pass.
 - `candidatesMatching(constraints, loadAnswers())` returns every word consistent with all
   evidence.
+- `feedbackTable()` is a pure accelerator: the table is cross-checked against `feedback()`, and
+  `candidatesMatchingFast()` returns exactly what `candidatesMatching()` returns. The original
+  pure-Python functions are unchanged.
 - All imports are package-absolute; run scripts with `PYTHONPATH=src`.
 - Naming is camelCase throughout.
 - The legacy colour-only `encode` is untouched; the letter-aware `encodeRounds` /
