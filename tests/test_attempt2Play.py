@@ -131,6 +131,71 @@ def testTheInteractiveGameRunsToCompletion(monkeypatch):
     playInteractive(policy, "reinforce")
 
 
+def testTheAdvisorProposesTheFirstWordBeforeAnyColoursAreGiven(monkeypatch, capsys):
+    monkeypatch.setattr(builtins, "input", lambda *args: "quit")
+
+    from attempt2.play import advise
+
+    with pytest.raises(SystemExit):
+        advise(_policy(), "reinforce")
+
+    output = capsys.readouterr().out
+    assert "The agent's word:" in output
+
+
+def testTheAdvisorLoopSolvesAGame(monkeypatch, capsys):
+    """The agent opens, the human reports the colours, and it finishes the game."""
+    from attempt2 import play
+    from wordle.feedback import feedback
+
+    policy = _policy()
+    secret = heldOut()[0]
+    suggestions = []
+    realSuggestionFor = play.suggestionFor
+
+    def recordingSuggestionFor(policyArgument, history):
+        word = realSuggestionFor(policyArgument, history)
+        suggestions.append(word)
+        return word
+
+    monkeypatch.setattr(play, "suggestionFor", recordingSuggestionFor)
+
+    def fakeInput(prompt):
+        # Report the true colours of the word the agent just proposed.
+        pattern = feedback(suggestions[-1], secret)
+        return " ".join(str(color) for color in pattern)
+
+    monkeypatch.setattr(builtins, "input", fakeInput)
+
+    play.advise(policy, "reinforce")
+
+    output = capsys.readouterr().out
+    assert "SOLVED" in output
+    assert suggestions[-1] == secret
+
+
+def testTheAdvisorRejectsColoursThatCannotHappen(monkeypatch, capsys):
+    """A colour pattern no secret could produce must be refused, not believed."""
+    from attempt2 import play
+
+    attempts = []
+
+    def fakeInput(prompt):
+        attempts.append(1)
+        # Four greens and then a yellow can never happen: if the first four positions
+        # are green, the secret's first four letters are fixed, and the only letter left
+        # can only be green or grey - the yellow pass has no copy of it left to award.
+        return "quit" if len(attempts) > 1 else "2 2 2 2 1"
+
+    monkeypatch.setattr(builtins, "input", fakeInput)
+
+    with pytest.raises(SystemExit):
+        play.advise(_policy(), "reinforce")
+
+    output = capsys.readouterr().out
+    assert "No answer is consistent with those colours" in output
+
+
 def testTheBoardRendersWithoutFailing(capsys):
     history = [("crane", (0, 1, 2, 0, 0))]
 

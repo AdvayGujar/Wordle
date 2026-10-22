@@ -99,7 +99,7 @@ distribution's average.
 # you type the first guess, the trained agent plays the rest
 PYTHONPATH=src .venv/bin/python -m attempt2.play
 
-# you type every guess and its colours, the agent suggests the next word
+# the agent proposes each word, you give back the colours
 PYTHONPATH=src .venv/bin/python -m attempt2.play --advise
 
 # evaluate the agent against the baselines on the 400 held-out secrets
@@ -163,7 +163,7 @@ src/
     └── attempt2.md       # what Attempt 2 is doing, and why
 src/attempt3/
 └── attempt3.md           # the information-theoretic attempt: the math and the plan
-tests/                    # 313 tests
+tests/                    # 316 tests
 ```
 
 ## Setup

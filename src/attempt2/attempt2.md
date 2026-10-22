@@ -783,18 +783,31 @@ that the combination is significantly better than the best baseline is *not* sup
 | Mode | Command | What it does |
 |---|---|---|
 | Interactive | `python -m attempt2.play` | You type guess 1; the agent plays the rest |
-| Advisor | `python -m attempt2.play --advise` | You type every guess **and** its colours; the agent suggests the next word |
+| Advisor | `python -m attempt2.play --advise` | The agent proposes each word; you give back the colours |
 | Automatic | `python -m attempt2.play --auto --games 400` | The agent is evaluated against the baselines on the held-out secrets |
 
 `--algo` picks the agent: `reinforce` (the default and the best), `dqn` or `ppo`.
 
-**Two details worth knowing:**
+**Three details worth knowing:**
 
-- **The human may play any legal word, not only an answer.** The agent's action space is
-  the 2,315 answers, because that is what it chooses from, but a person playing Wordle can
-  type any legal guess. `WordleEnv.playWord()` plays those with the same rules, so the
-  evidence the agent reasons about is the evidence a real game produces — and the agent's
-  mask is recomputed from that history.
+- **The advisor is agent-driven.** It opens with its own word, you report the five colours
+  the board showed, and it proposes the next word from the evidence it now has:
+
+  ```
+    The agent's word: ACTOR
+  Colours for ACTOR (G/Y/X per position, or e.g. 2 1 0 0 2): GYXXG
+    1. ACTOR  🟩🟨⬜⬜🟩   [green, yellow, grey, grey, green]
+
+    Consistent answers left: 3
+  ```
+
+  Colours that no secret could have produced are refused and the same word is proposed
+  again, so a mistyped colour cannot poison the rest of the session.
+- **The human may play any legal word, not only an answer** (interactive mode). The agent's
+  action space is the 2,315 answers, because that is what it chooses from, but a person
+  playing Wordle can type any legal guess. `WordleEnv.playWord()` plays those with the same
+  rules, so the evidence the agent reasons about is the evidence a real game produces — and
+  the agent's mask is recomputed from that history.
 - **The advisor mode never sees the secret.** The observation and the mask are both
   functions of the history alone, so the advice is computed without a game at all. The
   same history always produces the same suggestion, which is the test that pins it.
@@ -804,7 +817,7 @@ that the combination is significantly better than the best baseline is *not* sup
 ## 12. How to run and test
 
 ```bash
-# the whole suite (313 tests: 196 pre-existing + 117 new)
+# the whole suite (316 tests: 196 pre-existing + 120 new)
 .venv/bin/python -m pytest tests/ -q
 
 # the Attempt-2 tests on their own
@@ -829,7 +842,7 @@ PYTHONPATH=src .venv/bin/python -m attempt2.experiment
 # play: you type the first guess and the agent plays the rest
 PYTHONPATH=src .venv/bin/python -m attempt2.play
 
-# advise: you type every guess and its colours, the agent suggests the next word
+# advise: the agent proposes each word, you give back the colours
 PYTHONPATH=src .venv/bin/python -m attempt2.play --advise
 
 # evaluate the agent against the baselines

@@ -2,9 +2,10 @@
 
 MODES
   (default)  interactive - you type guess 1, the agent plays the rest.
-  --advise   you type every guess AND its colours; the agent suggests the next word.
-             This is the human-in-the-loop mode: the agent never sees the secret, only
-             the history you enter.
+  --advise   the agent proposes each word and you give back the colours. It opens, you
+             report what the board showed, and it proposes the next word from the evidence
+             it now has. The agent never sees the secret - only the history of guesses and
+             colours.
   --auto     evaluate the agent over many games, against the same baselines.
 
 WHICH AGENT
@@ -103,7 +104,11 @@ def suggestionFor(policy, history):
 # ---------------------------------------------------------------------------
 
 def promptGuess(history, label="Your guess"):
-    """Ask for a guess, refusing anything that is not a fresh legal word."""
+    """Ask for a guess, refusing anything that is not a fresh legal word.
+
+    Used by the interactive mode only. The advisor mode does not ask for a word at all:
+    there the agent proposes the word and the human reports the colours.
+    """
     played = {guess for guess, _ in history}
 
     while True:
@@ -197,28 +202,34 @@ def playInteractive(policy, algorithm):
 
 
 def advise(policy, algorithm):
-    """You enter every guess and its colours; the agent suggests the next word."""
+    """The agent proposes each word; you give back the colours.
+
+    The agent opens, you report what the board showed, and it proposes the next word from
+    the evidence it now has. The agent never sees the secret - it only ever sees the
+    history of guesses and colours.
+    """
     answers = loadAnswers()
     history = []
 
     print("=" * 78)
-    print("ADVISOR - you enter each guess and its colours; the %s agent suggests the next"
-          % algorithm)
+    print("ADVISOR - the %s agent proposes each word, you give back the colours" % algorithm)
     print("=" * 78)
-    print("  Enter colours position by position, e.g. GYXXG or 2 1 0 0 2.")
+    print("  Enter the five colours of the word it proposes, e.g. GYXXG or 2 1 0 0 2.")
     print("  Type 'quit' at any prompt to stop.")
     print()
 
     while True:
-        guess = promptGuess(history, "Your guess")
-        pattern = promptPattern(guess)
-        trial = history + [(guess, pattern)]
+        suggestion = suggestionFor(policy, history)
+        print("\n  The agent's word: %s" % suggestion.upper())
+
+        pattern = promptPattern(suggestion)
+        trial = history + [(suggestion, pattern)]
 
         if not candidatesMatching(trial, answers):
-            print("  No answer is consistent with that guess + colours. Check them and retry.")
+            print("  No answer is consistent with those colours. Check them and retry.")
             continue
 
-        history.append((guess, pattern))
+        history.append((suggestion, pattern))
         render(history)
 
         if all(color == 2 for color in pattern):
@@ -233,8 +244,6 @@ def advise(policy, algorithm):
         print("\n  Consistent answers left: %d" % len(consistent))
         if len(consistent) == 1:
             print("  Only one answer remains.")
-        print("  Next best word: %s" % suggestionFor(policy, history).upper())
-        print()
 
 
 def playAuto(algorithm, games):
