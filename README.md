@@ -96,6 +96,13 @@ distribution's average.
 **Attempt 3 (`src/attempt3/attempt3.md`) is the information-theoretic attempt**: compute
 the strategy instead of learning it, with the full mathematics and a four-phase build plan.
 
+**Attempt 4 (`plan.md` §10) is the from-scratch math attempt** — the Module-5 one: a binary
+candidate-consistency logistic regression written in NumPy, with a hand-derived gradient
+`Xᵀ(p − y)/N`, a finite-difference check, a directional-derivative check, and gradient
+descent. **NumPy only: no scikit-learn, no PyTorch.** It was originally Attempt 3 and was
+not changed in any way — only renumbered and moved from `src/attempt3/` to `src/attempt4/`,
+because Attempt 2 measured that the opening-word decision is better computed than learned.
+
 The `RL stack is pinned in requirements.txt`, and `feedbackTable.py` precomputes every
 answer/answer feedback pair once (~5 MB, built lazily) so RL steps are array lookups instead
 of Python calls.
