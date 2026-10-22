@@ -164,6 +164,34 @@ def testAnIllegalActionIsRejectedLoudly():
         env.step(-1)
 
 
+def testResetCanPlayASpecificSecret():
+    env = WordleEnv()
+    secret = trainSecrets()[0]
+
+    env.reset(seed=0, options={"secret": secret})
+
+    assert env.secret == secret
+
+
+def testAForcedSecretIsCheckedAgainstTheModePool():
+    # The leak guard has to hold for forced secrets too, not just for sampled ones.
+    trainEnv = WordleEnv(mode=TRAIN_MODE)
+    evalEnv = WordleEnv(mode=EVAL_MODE)
+
+    with pytest.raises(ValueError, match="not in the train secret pool"):
+        trainEnv.reset(seed=0, options={"secret": heldOutSecrets()[0]})
+
+    with pytest.raises(ValueError, match="not in the eval secret pool"):
+        evalEnv.reset(seed=0, options={"secret": trainSecrets()[0]})
+
+
+def testAForcedSecretMustBeAnAnswer():
+    env = WordleEnv()
+
+    with pytest.raises(ValueError, match="not in the train secret pool"):
+        env.reset(seed=0, options={"secret": "notaword"})
+
+
 def testSteppingAfterTheEpisodeEndsIsRejectedLoudly():
     env = WordleEnv()
     env.reset(seed=6)

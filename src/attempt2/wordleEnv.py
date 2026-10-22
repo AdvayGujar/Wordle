@@ -75,6 +75,11 @@ class WordleEnv(gym.Env):
 
         self._secretPool = self._trainSecrets if mode == TRAIN_MODE else self._testSecrets
 
+        # WHY A SET: `reset(options={"secret": ...})` has to check the forced secret
+        # against the pool, and a set lookup is O(1) instead of a scan of 1,915 words on
+        # every episode.
+        self._poolSet = set(self._secretPool)
+
         answers = loadAnswers()
         low, high = observationBounds(observationMode)
         self.observation_space = spaces.Box(
@@ -99,11 +104,30 @@ class WordleEnv(gym.Env):
         WHY `super().reset(seed=seed)`: that is how Gymnasium seeds `self.np_random`, and
         seeding it is what makes a run reproducible. The secret is drawn from that seeded
         generator, so `reset(seed=42)` always starts the same game.
+
+        WHY `options={"secret": ...}` EXISTS: an evaluation has to play a *specific*
+        secret, one after another, on the same set every time. Passing the secret
+        through the standard Gymnasium `options` channel is the idiomatic way to do that,
+        and it is checked against this mode's pool - so an eval-mode env refuses a
+        training secret and a train-mode env refuses a held-out one. The leak guard
+        therefore holds for forced secrets too, not just for sampled ones.
         """
         super().reset(seed=seed)
 
-        position = int(self.np_random.integers(len(self._secretPool)))
-        self._secret = self._secretPool[position]
+        secret = None
+        if options:
+            secret = options.get("secret")
+
+        if secret is None:
+            position = int(self.np_random.integers(len(self._secretPool)))
+            secret = self._secretPool[position]
+        elif secret not in self._poolSet:
+            raise ValueError(
+                "secret %r is not in the %s secret pool; this environment cannot play it"
+                % (secret, self.mode)
+            )
+
+        self._secret = secret
         self._secretIndex = answersVocab().indexOf(self._secret)
 
         self._history = []

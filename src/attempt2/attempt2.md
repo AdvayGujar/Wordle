@@ -1,11 +1,12 @@
 # Attempt 2 — reinforcement learning (the agent learns a strategy on its own)
 
-**Status:** 🟡 **Phase A complete** (environment, split, observation, action mask). Phases B–D
-(baselines, learning algorithms, experiment + write-up) are planned but not built. This file
-records what Attempt 2 is trying to do, what has been built so far, and every design choice
-behind it. It will be extended with results as the phases land.
+**Status:** 🟡 **Phases A and B complete** (environment, split, observation, action mask,
+evaluation harness, baselines). Phases C–D (the learning algorithms, and the experiment +
+results) are planned but not built. This file records what Attempt 2 is trying to do, what
+has been built so far, and every design choice behind it. It will be extended with the
+agent's results as the phases land.
 
-**Files (Phase A)**
+**Files (built)**
 
 | Piece | Purpose |
 |---|---|
@@ -14,16 +15,18 @@ behind it. It will be extended with results as the phases land.
 | `observation.py` | Evidence history → one fixed-length vector the policy can read |
 | `actionMask.py` | Which of the 2,315 answers are still legal to guess, given the evidence |
 | `wordleEnv.py` | The Gymnasium environment: one episode = one Wordle game |
+| `eval.py` | The single measurement harness every policy is scored with |
+| `baselines.py` | The policies the learned agent has to beat |
+| `smoke.py` | The end-to-end smoke test: can the environment be played and scored? |
 
 **Files (planned)**
 
 | Piece | Purpose |
 |---|---|
-| `baselines.py` | Masked random, random legal, fixed word, and the Attempt-1 solver |
-| `eval.py` | The one measurement harness every policy is scored with |
 | `policies.py` | The network(s), and masked action selection |
 | `reinforce.py`, `dqn.py`, `ppo.py` | The three algorithms |
-| `replayBuffer.py`, `train.py`, `smoke.py`, `experiment.py` | Buffer, CLI, smoke test, experiment runner |
+| `replayBuffer.py`, `train.py` | The replay buffer and the training CLI |
+| `experiment.py` | Runs everything and produces the comparison tables and plots |
 | `attempt2.md` | This file |
 
 ---
@@ -31,10 +34,10 @@ behind it. It will be extended with results as the phases land.
 ## Architecture at a glance
 
 Attempt 2 has one loop — *the agent plays a game and gets a reward* — and three places where
-the data flows differently: **training** (the agent plays against training secrets and the
-policy improves), **evaluation** (the agent plays against the 400 held-out secrets and is
-never allowed to improve), and **the episode itself** (what happens between a guess and the
-next observation).
+the data flows differently: **the episode** (what happens between a guess and the next
+observation), **training** (the agent plays against training secrets and the policy
+improves), and **evaluation** (the agent plays against the 400 held-out secrets and is never
+allowed to improve).
 
 **Episode anatomy — one turn of one game (built)**
 
@@ -82,7 +85,6 @@ next observation).
             v                            v
    trainSecrets (1915)        heldOutSecrets (400, disjoint)
             │                            │
-            │                            │
    WordleEnv(mode="train")     WordleEnv(mode="eval")
    reset(seed) samples ONLY    reset(seed) samples ONLY
    from trainSecrets           from heldOutSecrets
@@ -103,21 +105,33 @@ next observation).
    (reward, win rate)             guess distribution / first guess
 ```
 
-**Evaluation path — what every reported number must come from (Phase B, planned)**
+**Evaluation path — the one place every number comes from (Phase B, built)**
 
 ```
-                       policy or baseline (one pick function)
-                                      │
-                                      v
-                            eval.evaluate(policy, secrets)
-                                      │
-            ┌─────────────────────────┼─────────────────────────┐
-            v                         v                         v
-       win rate              avg guesses on wins        first-guess counts
-            │                         │                         │
-            └─────────────────────────┼─────────────────────────┘
-                                      v
-                              the comparison table
+                     policy  ──────────────────────────────┐
+                        │                                  │
+                        v                                  │
+              PolicyState(observation, mask, history)     │
+                        │                                  │
+                        v                                  │
+              action = policy(state)                      │
+                        │                                  │
+                        v                                  │
+            ┌───────────┴───────────┐                      │
+            │ is the action legal?  │                      │
+            └───────────┬───────────┘                      │
+                yes │         │ no                         │
+                    │         └──> counted as an illegal   │
+                    │              action, and PLAYED       │
+                    v                  anyway               │
+            env.step(action) <──────────────────────────────┘
+                    │
+                    v
+      ┌─────────────────────────────────────────────┐
+      │ win rate · avg guesses on wins · avg guesses │
+      │ over all games · wins-by-turn distribution · │
+      │ first-guess counts · illegal actions        │
+      └─────────────────────────────────────────────┘
 ```
 
 **How to read it.**
@@ -127,14 +141,14 @@ next observation).
   exactly as they are, and puts everything new under `src/attempt2/`.
 - **The split is the load-bearing piece.** An RL agent learns by *playing*, so if the
   environment can sample an evaluated secret during training, every held-out number is
-  contaminated. `WordleEnv` holds the split itself and samples from exactly one half.
+  contaminated. `WordleEnv` holds the split itself and samples from exactly one half — and
+  refuses a secret from the other half even when one is forced.
 - **The mask is the reason the agent can learn at all.** Without it the policy has to spend
   its capacity rediscovering "don't repeat a guess" and "don't guess an eliminated word".
   With it, the legal set often collapses to a handful of words by turn 4.
-- **One measurement harness.** Baselines and trained agents are scored by the same function
-  on the same 400 secrets. If a number is reported anywhere else, it must come from there.
-- **Two halves, one agent.** Training mode and evaluation mode are the same class with a
-  different secret pool — not a flag that might be set wrongly halfway through a run.
+- **One measurement harness.** Baselines and trained agents are scored by the same function,
+  on the same 400 secrets, through the same environment. If a number is reported anywhere
+  else, it must come from there.
 
 **Data shapes at each boundary**
 
@@ -148,6 +162,8 @@ next observation).
 | Reward | `float` | `+1` win, `0` loss, `-0.05` per guess played |
 | Step result | `(obs, reward, terminated, truncated, info)` | Gymnasium 1.1 contract |
 | `info` | `dict` | `round`, `candidates` (legal actions left), `guess`, `solved` |
+| `PolicyState` | `(observation, mask, history)` | Everything a policy may see — never the secret |
+| `EvaluationResult` | dataclass | The score of one policy over one set of secrets |
 
 ---
 
@@ -224,14 +240,18 @@ the contract, not a detail.
   Attempt 1 actually holds out `shuffled[600:1000]`, 400 words. Those are different sets, so
   the comparison would not have been like-for-like. The resolution: Attempt 2 holds out
   `shuffled[1915:]` (400 words, the same evaluation size as Attempt 1) and **re-runs the
-  Attempt-1 solver on exactly those 400** when the comparison table is built. The RL agent
-  still gets 1,915 training secrets, which is the variety RL needs — 600 would be thin.
+  Attempt-1 solver on exactly those 400**. The RL agent still gets 1,915 training secrets,
+  which is the variety RL needs — 600 would be thin.
 - **The split lives on the environment, not in a global.** `WordleEnv` holds the two lists and
   `reset()` picks one of them by mode. There is deliberately no "all answers" attribute that a
   later `reset()` could reach.
 - **The assertion is in the constructor.** `WordleEnv.__init__` calls `assertNoLeakage` every
   time it is built, so the environment cannot be constructed in a leaky configuration even if a
   test forgets to check.
+- **Forced secrets are checked too.** `reset(options={"secret": ...})` (added in Phase B so the
+  harness can play a specific secret) validates the secret against the mode's pool: an
+  eval-mode env refuses a training secret and a train-mode env refuses a held-out one. The
+  leak guard holds for forced secrets, not just for sampled ones.
 - **The name is `heldOutSecrets`, not `testSecrets`.** Pytest collects any imported name
   that starts with `test` as a test function and warns about it. A detail, but it cost a
   confusing warning during Phase A.
@@ -362,52 +382,132 @@ class WordleEnv(gym.Env):
 
 ---
 
-## 6. What Phase A measured
+## 6. The evaluation harness (`eval.py`)
+
+### 6.1 The functions
+
+```python
+PolicyState(observation, mask, history)     # everything a policy may see
+evaluate(policy, secrets, name, mode, maxGuesses, seed) -> EvaluationResult
+formatResultsTable(results) -> str          # the markdown table for the report
+firstGuessTable(counts, limit) -> str       # the opening-guess histogram
+```
+
+`EvaluationResult` carries `winRate`, `avgGuessesOnWins`, `avgGuessesAll`, the wins-by-turn
+distribution, the first-guess counts, the number of illegal actions, and the per-game record.
+
+### 6.2 The design choices
+
+- **One harness for everything.** A baseline measured by its own script and an agent
+  measured by its training loop would differ in some invisible way — a different guess
+  limit, a different secret set, a different definition of "average guesses" — and the table
+  would then compare two different experiments. So there is exactly one `evaluate()`.
+- **A policy is `policy(state) -> action index`.** `PolicyState` bundles the observation, the
+  mask and the history into one named object, so the interface is obvious and it is visible
+  that the secret is *not* part of it. The Attempt-1 pickers are adapted to it rather than
+  reimplemented.
+- **The environment is used, not a reimplemented game loop.** The harness must score exactly
+  the environment the agent will be trained on — same rules, same mask, same reward. A second
+  copy of the loop would drift, and the drift would show up as a difference between training
+  and evaluation.
+- **Illegal actions are played and counted, not rescued.** The mask is a constraint on the
+  *policy*, not on the game. If a policy asks to play a word the feedback already eliminated,
+  it loses a guess — that is the honest cost of not using the mask — and the harness reports
+  the count so the behaviour is visible instead of hidden.
+- **The mode decides which secrets may be scored.** `evaluate(..., mode="eval")` uses an
+  eval-mode environment, which refuses a training secret; `mode="train"` refuses a held-out
+  one. "We evaluated on the held-out set" is therefore a property of the code, not a claim
+  in the report.
+
+---
+
+## 7. The baselines (`baselines.py`) and what they say
+
+### 7.1 The policies
+
+| Baseline | What it is | Why it is here |
+|---|---|---|
+| `maskedRandomPolicy` | Uniform choice among the legal actions | **The bar.** It uses the same information the agent has and still wins almost every game |
+| `fixedOpenerRandomPolicy` | `crane` first, then masked random | Isolates the value of the *opening* move from the rest of the game |
+| `unmaskedRandomPolicy` | Uniform choice among all 2,315 answers, ignoring the mask | The ablation: what is the mask worth? |
+| `fixedWordPolicy` | Always the same word | The control: a strategy that does nothing |
+| `attempt1SolverPolicy` | Attempt 1's trained model + rule mask, adapted | The row the agent has to be compared against |
+
+### 7.2 Measured on the 400 held-out secrets
+
+```
+| Policy                                | Win rate | Avg guesses (wins) | Avg guesses (all) | Illegal |
+|---------------------------------------|----------|---------------------|--------------------|---------|
+| masked random                         | 98.5%    | 4.07                | 4.10               | 0       |
+| masked random, fixed opener 'crane'   | 99.0%    | 3.80                | 3.83               | 0       |
+| unmasked random (no mask)             | 0.2%     | -                   | 5.99               | 1950    |
+| fixed word ('crane' every turn)       | 0.2%     | -                   | 5.99               | 1995    |
+| Attempt-1 solver (model + rule mask)  | 97.8%    | 3.90                | 3.95               | 0       |
+```
+
+### 7.3 Reading this honestly
+
+- **The bar is 3.80 average guesses, not 3.90.** The strongest baseline is *masked random
+  with a fixed opener* — it does not even look at the evidence, it just plays `crane` and
+  then picks at random among the survivors. It beats the Attempt-1 solver (3.90) because one
+  well-chosen opener is worth more than a better tie-break on later turns. A learned agent
+  that merely matches Attempt 1's 3.90 has learned nothing at all.
+- **Win rate is saturated and cannot judge the agent.** The two best baselines are 99.0% and
+  98.5% — 0.5 points apart on 400 games, which is noise. Average guesses is the metric that
+  separates them (3.80 vs 4.07), and it is the metric the report has to lead with.
+- **The mask is worth everything.** Unmasked random wins one game in 400 and makes ~4.9
+  illegal guesses per game: it spends its turns playing words the feedback has already
+  eliminated. This is the quantitative version of the argument for masking in §4.
+- **The Attempt-1 row reproduces.** Its 97.8% here matches the 97.8% Attempt 1 reported on
+  its own 400 secrets (`shuffled[600:1000]`). Different secret set, same result — which is
+  evidence that the harness and the split are measuring what they claim to.
+- **A curiosity worth stating:** `crane` is one of the 400 held-out secrets, so the
+  fixed-opener baseline wins in a single guess on that one game (the `1:1` in its wins-by-turn
+  row). It is one game in 400, and the opener was fixed before the split, but it is the kind
+  of detail that should be visible rather than discovered later.
+
+---
+
+## 8. What Phase A measured (environment facts)
 
 Two numbers came out of building the environment, and both matter for Phase B.
 
-### 6.1 A masked *random* policy already wins ~100% of games
+### 8.1 A masked *random* policy already wins ~100% of games
 
 2,000 games with a uniform-random choice among the legal (consistent, unguessed) answers:
-**100% wins**. A 300-game spot check: 98%.
+**100% wins**. A 300-game spot check: 98%. On the full held-out set (§7.2): 98.5%.
 
 The mask does the hard work. The secret is always still consistent, so the legal set shrinks
 fast, and a uniform pick among a handful of words hits it. This is the same lesson Attempt 1
 ended on — the *rules* solve the game and the remaining headroom is *strategy* — now showing
 up in the RL setting.
 
-What it changes:
+### 8.2 The environment is fast enough
 
-- **Win rate can no longer judge the agent.** The ceiling is ~100% and the random baseline
-  already reaches it, so "the agent wins 99%" says nothing about whether it learned
-  anything.
-- **The metrics that still discriminate are average guesses used, the guess-count
-  distribution, and the first-guess distribution** — the last of which is the headline
-  result Attempt 2 promised (the plan's "did it discover a strong opener by itself?").
-- **Phase B must include "masked random" as the real bar.** A legal-random baseline is ~0%
-  and would make every policy look brilliant.
-
-### 6.2 The environment is fast enough
-
-With the feedback table warm, the env runs **~15,000–20,000 steps/sec** (mask + observation
-+ step; ~5,600/sec measured through a harness that also pays for `flatnonzero` and the random
-choice). The one-off cost is building the feedback table (~1 s, cached for the process).
+With the feedback table warm, the environment runs **~23,000 steps/sec** end-to-end
+(measured through the harness, which also pays for the policy call and the bookkeeping). The
+one-off cost is building the feedback table (~1 s, cached for the process).
 
 The plan warned that "millions of steps need vectorised/parallel envs". At this speed that is
-not true for the planned scale — a 1M-step run is minutes of environment time — so no
+not true for the planned scale — a 1M-step run is under a minute of environment time — so no
 vectorised environment machinery is needed.
 
 ---
 
-## 7. How to run and test
+## 9. How to run and test
 
 ```bash
-# the whole suite (238 tests: 196 pre-existing + 42 new)
+# the whole suite (260 tests: 196 pre-existing + 64 new)
 .venv/bin/python -m pytest tests/ -q
 
-# the Phase-A tests on their own
-.venv/bin/python -m pytest tests/test_attempt2Splits.py tests/test_attempt2Observation.py \
-                          tests/test_attempt2Mask.py tests/test_attempt2Env.py -q
+# the Attempt-2 tests on their own
+.venv/bin/python -m pytest tests/ -q -k attempt2
+
+# smoke test: can the environment be played and scored?
+PYTHONPATH=src .venv/bin/python -m attempt2.smoke --games 50
+
+# the baseline table, on the 400 held-out secrets
+PYTHONPATH=src .venv/bin/python -m attempt2.baselines
 
 # drive the environment by hand
 PYTHONPATH=src .venv/bin/python -c "
@@ -429,32 +529,33 @@ contract violation before an algorithm is built on top of it.
 | `tests/test_attempt2Splits.py` | Disjointness, determinism, the sizes, and that the split is the core's split |
 | `tests/test_attempt2Observation.py` | Fixed width, exact agreement with the core encoders, the padding |
 | `tests/test_attempt2Mask.py` | The mask equals the slow `candidatesMatching()` reference, minus the played words |
-| `tests/test_attempt2Env.py` | The Gymnasium contract, the reward values, and that training never samples a held-out secret |
+| `tests/test_attempt2Env.py` | The Gymnasium contract, the reward values, that training never samples a held-out secret, and that a forced secret is checked against the pool |
+| `tests/test_attempt2Eval.py` | The harness counts wins, guesses and illegal actions correctly, and refuses the wrong secrets |
+| `tests/test_attempt2Baselines.py` | Each baseline is what its name says |
 
 ---
 
-## 8. Phases B–D — what comes next
+## 10. Phases C–D — what comes next
 
 | Phase | Modules | The question it answers |
 |---|---|---|
-| **B** | `baselines.py`, `eval.py`, `smoke.py` | What does the agent have to beat, and how is it measured? |
 | **C** | `policies.py`, `replayBuffer.py`, `reinforce.py`, `dqn.py`, `ppo.py`, `train.py` | Can it learn? REINFORCE first — if the simplest algorithm cannot show a non-flat curve, adding two more only hides the bug |
 | **D** | `experiment.py`, this file | What did it learn on its own, and where does it fall short? |
 
-Phase B is the next gate, and it has one non-obvious requirement: **the Attempt-1 solver must
-be re-run on the Attempt-2 held-out set** (`shuffled[1915:]`, 400 secrets), because Attempt
-1's own 400-game evaluation used a different slice (`shuffled[600:1000]`). Without that, the
-"Attempt 1 vs Attempt 2" row in the table would be comparing two different test sets.
+The bar Phase C has to clear is the one measured in §7.2: **fewer than 3.80 guesses on
+wins** over the 400 held-out secrets, and a first-guess distribution that is *not* uniform —
+an agent that picks `crane` every time and then plays masked random has learned nothing, and
+one that concentrates on a better opener has learned something real.
 
 ---
 
-## 9. Limitations and open questions
+## 11. Limitations and open questions
 
 - **The agent cannot play a non-answer.** The action space is the 2,315 answers, so the agent
   can never use a legal probe word that is not a possible secret. This is a real restriction
   on the strategy it can learn, and it must be stated in the final results rather than
   discovered by a reader.
-- **Win rate is not a usable headline.** See §6.1. The final table has to lead with average
+- **Win rate is not a usable headline.** See §8.1. The final table has to lead with average
   guesses and the first-guess distribution.
 - **A uniform posterior still applies.** As in Attempt 1, every consistent candidate is
   equally likely a priori. What the agent can learn is which consistent candidate is *worth

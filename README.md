@@ -47,13 +47,26 @@ The learned model recovers the consistency rule, but it does **not** beat the ru
 filter. That is expected: the posterior is uniform over consistent candidates. The remaining
 headroom is strategy, not classification.
 
-Attempt 2 (reinforcement learning) is in progress. Its **Phase A — the environment — is
-built**: a Gymnasium `Env` with legal-action masking, a fixed-width observation, a secret
-split that keeps 400 answers held out, and a reward of +1 for a win minus 0.05 per guess.
-The `RL stack is pinned in `requirements.txt`, and `feedbackTable.py` precomputes every
+Attempt 2 (reinforcement learning) is in progress. **Phases A and B are built**: a Gymnasium
+`Env` with legal-action masking, a fixed-width observation, a secret split that keeps 400
+answers held out, a reward of +1 for a win minus 0.05 per guess, one measurement harness, and
+the baseline policies the learned agent has to beat.
+
+Measured on the 400 held-out secrets:
+
+| Policy | Win rate | Avg guesses (wins) |
+|---|---|---|
+| masked random | 98.5% | 4.07 |
+| masked random, fixed opener `crane` | 99.0% | **3.80** |
+| unmasked random (no mask) | 0.2% | — |
+| Attempt-1 solver (model + rule mask) | 97.8% | 3.90 |
+
+So the bar for the learned agent is **fewer than 3.80 guesses on wins** — beating Attempt 1's
+3.90 is not enough. The learning algorithms (REINFORCE / DQN / PPO) are not built yet.
+
+The `RL stack is pinned in requirements.txt`, and `feedbackTable.py` precomputes every
 answer/answer feedback pair once (~5 MB, built lazily) so RL steps are array lookups instead
-of Python calls. The learning algorithms (REINFORCE / DQN / PPO) and the comparison against
-Attempt 1 are not built yet.
+of Python calls.
 
 ![Consistency skill vs rounds](src/attempt1/accuracy.png)
 
@@ -82,8 +95,11 @@ src/
     ├── observation.py    # evidence -> one fixed-width vector
     ├── actionMask.py     # which of the 2,315 answers are still legal to guess
     ├── wordleEnv.py      # the Gymnasium environment
+    ├── eval.py           # the one measurement harness every policy is scored with
+    ├── baselines.py      # the policies the learned agent has to beat
+    ├── smoke.py          # end-to-end smoke test
     └── attempt2.md       # what Attempt 2 is doing, and why
-tests/                    # 238 tests
+tests/                    # 260 tests
 ```
 
 ## Setup
