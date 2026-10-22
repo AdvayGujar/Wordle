@@ -592,6 +592,27 @@ Against the Phase B baselines, on the same 400 held-out secrets:
   (3.795 with random play) and scored 4.01. Its *later* greedy choices are worse than a
   random pick among the legal answers. A confidently wrong policy loses to a random legal
   guess, and evaluating greedily is not a free win for a partially-trained agent.
+- **But PPO genuinely found good openers — the others did not.** Measuring the 8 words
+  each agent actually played the most (400 games each, masked random afterwards):
+
+  | Agent | Mean quality of its 8 most-played openers |
+  |---|---|
+  | **PPO** | **3.887** |
+  | REINFORCE | 4.027 |
+  | 8 openers picked at random | 4.043 |
+  | DQN | 4.166 |
+
+  PPO's words are genuinely better than random ones, so its concentration was learning,
+  not luck. REINFORCE's are indistinguishable from random, so its final pick of `actor`
+  was mildly lucky. DQN's are *worse* than random, which is consistent with its
+  Q-values never concentrating at all — after 150,000 episodes it was still playing all
+  2,315 openers almost evenly.
+- **The agent learned the information content of an opener, not a word.** PPO's two most
+  played openers are `slate` and `stale` — the same five letters in a different order —
+  and it was swapping between them (36% `slate` against 60% `stale`) when training
+  ended. Two anagrams carry almost the same information, which is what you would expect
+  if the policy had learned "open with a well-spread common letter set" rather than a
+  particular spelling.
 - **DQN is the only algorithm below the random baseline.** 2,315 actions is too many for a
   value-based method to generalise over from a 60-dimensional state.
 - **The validation numbers track the held-out numbers closely** (3.81 vs 3.85 for
