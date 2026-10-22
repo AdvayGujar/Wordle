@@ -27,6 +27,7 @@ agent's results as the phases land.
 | `train.py` | The training CLI: model, learning curve and results |
 | `openerSearch.py` | The exhaustive search for the best opening word |
 | `experiment.py` | Evaluates every policy on the held-out secrets and writes the figures |
+| `play.py` | The play modes: interactive, `--advise` and `--auto` |
 
 **Files (planned)**
 
@@ -775,10 +776,35 @@ that the combination is significantly better than the best baseline is *not* sup
 
 ---
 
-## 11. How to run and test
+## 11. The play modes
+
+`play.py` gives Attempt 2 the same three modes Attempt 1 has.
+
+| Mode | Command | What it does |
+|---|---|---|
+| Interactive | `python -m attempt2.play` | You type guess 1; the agent plays the rest |
+| Advisor | `python -m attempt2.play --advise` | You type every guess **and** its colours; the agent suggests the next word |
+| Automatic | `python -m attempt2.play --auto --games 400` | The agent is evaluated against the baselines on the held-out secrets |
+
+`--algo` picks the agent: `reinforce` (the default and the best), `dqn` or `ppo`.
+
+**Two details worth knowing:**
+
+- **The human may play any legal word, not only an answer.** The agent's action space is
+  the 2,315 answers, because that is what it chooses from, but a person playing Wordle can
+  type any legal guess. `WordleEnv.playWord()` plays those with the same rules, so the
+  evidence the agent reasons about is the evidence a real game produces — and the agent's
+  mask is recomputed from that history.
+- **The advisor mode never sees the secret.** The observation and the mask are both
+  functions of the history alone, so the advice is computed without a game at all. The
+  same history always produces the same suggestion, which is the test that pins it.
+
+---
+
+## 12. How to run and test
 
 ```bash
-# the whole suite (303 tests: 196 pre-existing + 107 new)
+# the whole suite (313 tests: 196 pre-existing + 117 new)
 .venv/bin/python -m pytest tests/ -q
 
 # the Attempt-2 tests on their own
@@ -799,6 +825,18 @@ PYTHONPATH=src .venv/bin/python -m attempt2.openerSearch --games 400 --refine-ga
 
 # the whole experiment: every policy on the held-out secrets, plus the figures
 PYTHONPATH=src .venv/bin/python -m attempt2.experiment
+
+# play: you type the first guess and the agent plays the rest
+PYTHONPATH=src .venv/bin/python -m attempt2.play
+
+# advise: you type every guess and its colours, the agent suggests the next word
+PYTHONPATH=src .venv/bin/python -m attempt2.play --advise
+
+# evaluate the agent against the baselines
+PYTHONPATH=src .venv/bin/python -m attempt2.play --auto --games 400
+
+# a different agent: --algo reinforce | dqn | ppo
+PYTHONPATH=src .venv/bin/python -m attempt2.play --algo ppo
 
 # drive the environment by hand
 PYTHONPATH=src .venv/bin/python -c "
@@ -827,10 +865,11 @@ contract violation before an algorithm is built on top of it.
 | `tests/test_attempt2ReplayBuffer.py` | The buffer keeps the next mask, drops the oldest transitions, and reports its own sizes |
 | `tests/test_attempt2Learning.py` | The policy head receives a gradient (the regression test for §9.6), DQN's target respects the next mask, PPO's advantages do not cross an episode |
 | `tests/test_attempt2OpenerSearch.py` | The search is deterministic, independent of the worker count, and can tell a good opener from a bad one |
+| `tests/test_attempt2Play.py` | The environment accepts the guesses the real game accepts and refuses the rest, and the advisor's suggestion depends only on the history |
 
 ---
 
-## 12. The final results (Phase D)
+## 13. The final results (Phase D)
 
 `experiment.py` evaluates every policy — the baselines and the three trained agents — on
 the same 400 held-out secrets, through the same harness, and writes the table, the three
@@ -911,7 +950,7 @@ memorised. See `src/attempt3/attempt3.md`.
 
 ---
 
-## 13. Limitations and open questions
+## 14. Limitations and open questions
 
 - **The agent cannot play a non-answer.** The action space is the 2,315 answers, so the agent
   can never use a legal probe word that is not a possible secret. This is a real restriction

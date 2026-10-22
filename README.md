@@ -93,6 +93,19 @@ history, but the best next guess depends on the set of still-consistent candidat
 the observation does not contain — so a learned policy can only memorise the training
 distribution's average.
 
+**Play it:**
+
+```bash
+# you type the first guess, the trained agent plays the rest
+PYTHONPATH=src .venv/bin/python -m attempt2.play
+
+# you type every guess and its colours, the agent suggests the next word
+PYTHONPATH=src .venv/bin/python -m attempt2.play --advise
+
+# evaluate the agent against the baselines on the 400 held-out secrets
+PYTHONPATH=src .venv/bin/python -m attempt2.play --auto --games 400
+```
+
 **Attempt 3 (`src/attempt3/attempt3.md`) is the information-theoretic attempt**: compute
 the strategy instead of learning it, with the full mathematics and a four-phase build plan.
 
@@ -146,10 +159,11 @@ src/
     ├── train.py          # the training CLI
     ├── openerSearch.py   # exhaustive search for the best opening word
     ├── experiment.py     # the final table and the figures
+    ├── play.py          # the play modes: interactive, --advise, --auto
     └── attempt2.md       # what Attempt 2 is doing, and why
 src/attempt3/
 └── attempt3.md           # the information-theoretic attempt: the math and the plan
-tests/                    # 303 tests
+tests/                    # 313 tests
 ```
 
 ## Setup

@@ -36,6 +36,8 @@ from attempt2 import config
 from attempt2.actionMask import maskFor
 from attempt2.observation import observationBounds, observationFor, observationWidth
 from attempt2.splits import assertNoLeakage, heldOutSecrets, trainSecrets, trainingSecrets
+from wordle.feedback import feedback
+from wordle.game import checkGuess
 from wordle.feedbackTable import decodePattern, feedbackTable
 from wordle.vocabulary import answersVocab, loadAnswers
 
@@ -189,6 +191,55 @@ class WordleEnv(gym.Env):
             "round": guessesUsed,
             "candidates": int(self.action_mask().sum()),
             "guess": guess,
+            "solved": solved,
+        }
+
+        reward = self._rewardFor(solved, truncated)
+
+        return observation, reward, solved, truncated, info
+
+    def playWord(self, word):
+        """Play a word that is not one of the answers - a human's guess.
+
+        WHY THIS EXISTS: the action space is the 2,315 answers, because that is what the
+        agent chooses from. A human playing the real game may type any legal word, and
+        those guesses change the evidence the agent reasons about. Playing them here keeps
+        the game faithful - the colours come from the same rules, and the agent's mask is
+        recomputed from the same history - while leaving `step()` untouched.
+
+        WHY A REPEAT IS REJECTED: Wordle does not let you play the same word twice, and
+        the mask already stops the agent from doing it. This is the same rule for the
+        human.
+        """
+        if self._finished:
+            raise RuntimeError(
+                "the episode is already over; call reset() before playing again"
+            )
+
+        word = checkGuess(word)
+
+        if any(guess == word for guess, _ in self._history):
+            raise ValueError("%s was already played" % word)
+
+        index = answersVocab().index.get(word)
+        if index is not None:
+            pattern = decodePattern(int(feedbackTable()[index, self._secretIndex]))
+        else:
+            pattern = feedback(word, self._secret)
+
+        self._history.append((word, pattern))
+        self._mask = None
+
+        solved = word == self._secret
+        guessesUsed = len(self._history)
+        truncated = guessesUsed >= self.maxGuesses and not solved
+        self._finished = solved or truncated
+
+        observation = observationFor(self._history, self.observationMode)
+        info = {
+            "round": guessesUsed,
+            "candidates": int(self.action_mask().sum()),
+            "guess": word,
             "solved": solved,
         }
 
