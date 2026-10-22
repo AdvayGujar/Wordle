@@ -273,7 +273,7 @@ def main():
     parser.add_argument("--algo", choices=ALGORITHMS, default="reinforce",
                         help="which trained agent to use (default: reinforce)")
     parser.add_argument("--advise", action="store_true",
-                        help="you enter every guess and its colours; the agent advises")
+                        help="the agent proposes each word; you give back the colours")
     parser.add_argument("--auto", action="store_true",
                         help="evaluate the agent over many games instead of playing one")
     parser.add_argument("--games", type=int, default=config.N_TEST_SECRETS,
