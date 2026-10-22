@@ -64,9 +64,19 @@ On the 400 held-out secrets, measured by the same harness:
 | DQN (150k episodes) | 95.8% | 4.34 |
 
 So the agent **beats the random baseline and beats Attempt 1**, but it does not beat one
-hand-picked opening word. Measured reason: openers differ by 0.46 guesses while a single
-game is noisy by about 1.0, so ranking them needs ~100 samples each — ~230,000 episodes
-just to sweep the 2,315 openers once.
+hand-picked opening word.
+
+An exhaustive search over **all 2,315 openers** (1.2M simulated games) settles what "best"
+means: `slate` at 3.779 guesses, against a median opener's 4.050 and the worst (`jazzy`)
+at 4.605. **PPO converged onto `slate` — the top of that ranking — from reward alone.**
+Neither REINFORCE (`actor`) nor DQN (`fight`) came close.
+
+Two things explain the attempt:
+- 144 of the 2,315 openers are within 0.05 guesses of the best, so the good openers are a
+  large, tightly packed group rather than a single peak.
+- The best openers are all built from the same common letters (18 of the top 20 contain
+  `a`, 18 contain `e`; six of them are permutations of the same five letters). The
+  information in an opener is in *which common letters it tests*, not their arrangement.
 
 The `RL stack is pinned in requirements.txt`, and `feedbackTable.py` precomputes every
 answer/answer feedback pair once (~5 MB, built lazily) so RL steps are array lookups instead
@@ -109,8 +119,9 @@ src/
     ├── dqn.py            # masked DQN with a target network
     ├── ppo.py            # clipped-surrogate PPO
     ├── train.py          # the training CLI
+    ├── openerSearch.py   # exhaustive search for the best opening word
     └── attempt2.md       # what Attempt 2 is doing, and why
-tests/                    # 295 tests
+tests/                    # 303 tests
 ```
 
 ## Setup

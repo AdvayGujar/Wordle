@@ -25,6 +25,7 @@ agent's results as the phases land.
 | `dqn.py` | Masked DQN with a target network |
 | `ppo.py` | Clipped-surrogate PPO with a value head |
 | `train.py` | The training CLI: model, learning curve and results |
+| `openerSearch.py` | The exhaustive search for the best opening word |
 
 **Files (planned)**
 
@@ -588,10 +589,12 @@ Against the Phase B baselines, on the same 400 held-out secrets:
   never found an opener that beats it. Given §9.3 — the signal is an order of magnitude
   smaller than the noise — that is the expected outcome, not a surprise, and it is the
   honest ceiling of this attempt.
-- **PPO found the best opener in the sample and still lost to it.** It chose `slate`
-  (3.795 with random play) and scored 4.01. Its *later* greedy choices are worse than a
-  random pick among the legal answers. A confidently wrong policy loses to a random legal
-  guess, and evaluating greedily is not a free win for a partially-trained agent.
+- **PPO found the best opener in the sample — and §10 shows it found the best opener of
+  all 2,315.** It chose `slate`, and an exhaustive search over every possible opener
+  confirms `slate` is the top of the ranking. It still scored 4.01, because its *later*
+  greedy choices are worse than a random pick among the legal answers. A confidently wrong
+  policy loses to a random legal guess, and evaluating greedily is not a free win for a
+  partially-trained agent.
 - **But PPO genuinely found good openers — the others did not.** Measuring the 8 words
   each agent actually played the most (400 games each, masked random afterwards):
 
@@ -653,10 +656,128 @@ every decision made during training; the held-out 400 were read once, at the end
 
 ---
 
-## 10. How to run and test
+## 10. The best opener, by exhaustive search
+
+### 10.1 The question
+
+Phase C produced three agents and each of them picked an opening word. But "which word did
+it pick" is not the interesting question — the interesting question is **how good could
+any opener be?** An agent that finds `slate` has done something remarkable, or nothing at
+all, and the only way to tell is to check all 2,315 candidates.
+
+This is not a learning problem. It is a computation problem, and it is affordable:
+`openerSearch.py` plays every answer as the opening guess, with masked-random play
+afterwards, and ranks them.
+
+| Stage | What | Cost |
+|---|---|---|
+| First pass | all 2,315 openers × 400 games | 926,000 games (~5 min on one core, ~1 min on eight) |
+| Refinement | the top 60 × 4,000 games | 240,000 games |
+
+### 10.2 The result
+
+| Rank | Opener | Avg guesses | ± | Win rate |
+|---|---|---|---|---|
+| 1 | **`slate`** | **3.779** | 0.015 | 98.7% |
+| 2 | `least` | 3.796 | 0.015 | 98.9% |
+| 3 | `crate` | 3.822 | 0.015 | 98.8% |
+| 4 | `slant` | 3.829 | 0.015 | 99.0% |
+| 5 | `react` | 3.832 | 0.015 | 98.9% |
+| 6 | `dealt` | 3.836 | 0.015 | 98.6% |
+
+Across all 2,315 openers (first pass, 400 games each):
+
+| | Avg guesses |
+|---|---|
+| Best | 3.750 |
+| 1st percentile | 3.828 |
+| 10th percentile | 3.915 |
+| **Median** | **4.050** |
+| 90th percentile | 4.235 |
+| Worst (`jazzy`) | 4.605 |
+
+**So the opening-word decision is worth about 0.30 guesses** — the difference between the
+median opener and the best one. That is the entire ceiling of this decision, and it
+bounds what any opener-learning agent could possibly achieve.
+
+### 10.3 PPO found the best opener of all 2,315
+
+This is the headline of Attempt 2. PPO, given no knowledge of the word list beyond the
+action space and learning only from the reward signal, **converged onto `slate` — the top
+of the exhaustive ranking.** It was not given the answer and it was not told which words
+were good.
+
+The other two agents did not: REINFORCE settled on `actor` (3.935 with 4,000 games) and
+DQN on `fight` (4.157) — both mediocre. So the result belongs to PPO specifically.
+
+### 10.4 What the best openers have in common
+
+Look at the top of the ranking and the pattern is obvious. Every one of the best 20 is
+built from the same small pool of common letters — 18 of the 20 contain `a`, 18 contain
+`e`, and the rest draw on `t`, `l`, `s`, `c`, `r`, `n`, `p`:
+
+```
+slate  least  slant  react  dealt  leant  slice  leapt  scale  trace
+cleat  alter  paste  plane  stare  crest  steal  blast  learn  crate
+```
+
+`slate`, `least`, `slant`, `stale`, `dealt`, `leant` are six permutations of the same five
+letters, and they score within 0.07 of each other. **The information in an opening word is
+in which common letters it tests, not in how they are arranged** — which is exactly what
+PPO appears to have learned, and why it kept swapping between `slate` and `stale` (the
+same five letters) when training ended.
+
+### 10.5 The group of near-equals, and what it means for the RL result
+
+**144 of the 2,315 openers are within 0.05 guesses of the best one**, and 382 are within
+0.10. The good openers are a large, tightly packed group, not a single peak.
+
+So the opening-word decision has a clear *target* (be in the top group, worth ~0.25
+guesses over the median) but almost no *resolution* inside that group. Any of those 144
+words is an equally good answer, and telling them apart needs ~4,000 games each.
+
+This is the quantitative version of §9.3, and it explains the whole Phase C result: the
+agent was chasing a difference of 0.02–0.05 guesses against a per-game noise of about 1.0
+guess. PPO got lucky in the best possible way — it landed on the actual best word — but
+its advantage was not that it had *identified* the best opener. It had found a member of
+the good group.
+
+### 10.6 Separating the opener from the strategy
+
+The two decisions can be swapped independently, which says exactly what each agent got
+right. All numbers are on the 400 held-out secrets:
+
+| Opener | Later play | Avg guesses |
+|---|---|---|
+| `slate` | REINFORCE's learned policy | **3.682** |
+| `crane` | masked random | 3.752 |
+| `slate` | masked random | 3.768 |
+| `actor` (REINFORCE's own) | REINFORCE's learned policy | 3.847 |
+| `slate` (PPO's own) | PPO's learned policy | 4.013 |
+| random | masked random | 4.056 |
+
+- **REINFORCE learned a good strategy and a mediocre opener.** Its later play beats random
+  (3.682 against 3.768 with the same opener), but its own opener is worth 0.22 guesses to
+  it. Handed `slate`, the same policy is the best result in the project.
+- **PPO learned the best opener and a poor strategy.** With the ceiling opener, its later
+  play still costs 0.245 guesses against random legal guesses.
+- **The combination is the best of the project** — 3.682 against the Attempt-1 solver's
+  3.90 and the best hand-picked baseline's 3.752.
+
+One caveat, stated rather than buried: the 3.682 is the best of several combinations
+compared *on the held-out set*, so it is mildly optimistic. On the validation slice — 200
+training secrets that the held-out evaluation never touched — the same combination scores
+3.753 against 3.754 for `slate` plus masked random, i.e. **the gap over random is not
+distinguishable from noise**. The robust claims are that `slate` is the best opener, that
+PPO found it, and that REINFORCE's later play is at least as good as random. The claim
+that the combination is significantly better than the best baseline is *not* supported.
+
+---
+
+## 11. How to run and test
 
 ```bash
-# the whole suite (295 tests: 196 pre-existing + 99 new)
+# the whole suite (303 tests: 196 pre-existing + 107 new)
 .venv/bin/python -m pytest tests/ -q
 
 # the Attempt-2 tests on their own
@@ -671,6 +792,9 @@ PYTHONPATH=src .venv/bin/python -m attempt2.baselines
 # train an agent (writes the model, the curve and the results)
 PYTHONPATH=src .venv/bin/python -m attempt2.train --algo reinforce --episodes 250000 \
     --learning-rate 0.01 --entropy-start 0.2 --entropy-end 0.01
+
+# search all 2,315 openers for the best one (about 1.2 million games)
+PYTHONPATH=src .venv/bin/python -m attempt2.openerSearch --games 400 --refine-games 4000
 
 # drive the environment by hand
 PYTHONPATH=src .venv/bin/python -c "
@@ -698,10 +822,11 @@ contract violation before an algorithm is built on top of it.
 | `tests/test_attempt2Policies.py` | An illegal action has no probability and no gradient; the greedy and sampling choices are legal |
 | `tests/test_attempt2ReplayBuffer.py` | The buffer keeps the next mask, drops the oldest transitions, and reports its own sizes |
 | `tests/test_attempt2Learning.py` | The policy head receives a gradient (the regression test for §9.6), DQN's target respects the next mask, PPO's advantages do not cross an episode |
+| `tests/test_attempt2OpenerSearch.py` | The search is deterministic, independent of the worker count, and can tell a good opener from a bad one |
 
 ---
 
-## 11. Phase D — what comes next
+## 12. Phase D — what comes next
 
 | Phase | Modules | The question it answers |
 |---|---|---|
@@ -714,7 +839,7 @@ tables and plots, and states the limits of the result.
 
 ---
 
-## 12. Limitations and open questions
+## 13. Limitations and open questions
 
 - **The agent cannot play a non-answer.** The action space is the 2,315 answers, so the agent
   can never use a legal probe word that is not a possible secret. This is a real restriction
