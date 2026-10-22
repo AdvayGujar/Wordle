@@ -109,20 +109,31 @@ def attempt1SolverPolicy(artifact=None, firstGuess="crane", mask=True):
     return policy
 
 
+def baselineFactories(seed):
+    """Every baseline as a (name, factory) pair.
+
+    WHY FACTORIES AND NOT POLICIES: the Attempt-1 row needs a trained model, and that
+    model is a generated artifact - it may simply not exist in a fresh checkout. A
+    factory lets the caller skip that one row instead of losing every other baseline
+    to a `FileNotFoundError`.
+    """
+    return [
+        ("masked random", lambda: maskedRandomPolicy(seed)),
+        ("masked random, fixed opener 'crane'",
+         lambda: fixedOpenerRandomPolicy("crane", seed + 1)),
+        ("unmasked random (no mask)", lambda: unmaskedRandomPolicy(seed + 2)),
+        ("fixed word ('crane' every turn)", lambda: fixedWordPolicy("crane")),
+        ("Attempt-1 solver (model + rule mask)", lambda: attempt1SolverPolicy()),
+    ]
+
+
 def baselinePolicies(seed):
     """Every baseline, in the order the report should list them.
 
     WHY A SINGLE LIST: the report's baseline table and the code that produces it must not
     be able to disagree about which baselines exist.
     """
-    return [
-        ("masked random", maskedRandomPolicy(seed)),
-        ("masked random, fixed opener 'crane'",
-         fixedOpenerRandomPolicy("crane", seed + 1)),
-        ("unmasked random (no mask)", unmaskedRandomPolicy(seed + 2)),
-        ("fixed word ('crane' every turn)", fixedWordPolicy("crane")),
-        ("Attempt-1 solver (model + rule mask)", attempt1SolverPolicy()),
-    ]
+    return [(name, factory()) for name, factory in baselineFactories(seed)]
 
 
 def main():
@@ -148,12 +159,28 @@ def main():
     print("held-out secrets: %d" % len(secrets))
     print()
 
-    results = [
-        evaluate(policy, secrets, name=name)
-        for name, policy in baselinePolicies(config.SEED)
-    ]
+    results = []
+    skipped = []
+
+    for name, factory in baselineFactories(config.SEED):
+        try:
+            policy = factory()
+        except FileNotFoundError as error:
+            # The Attempt-1 model is a generated artifact. If it is missing, the other
+            # four baselines are still perfectly measurable, so report the gap instead of
+            # failing the whole run.
+            skipped.append((name, error))
+            continue
+
+        results.append(evaluate(policy, secrets, name=name))
 
     print(formatResultsTable(results))
+
+    if skipped:
+        print()
+        for name, error in skipped:
+            print("skipped: %s (%s)" % (name, error))
+
     print()
     print("Opening guesses, masked random:")
     print(firstGuessTable(results[0].firstGuessCounts, limit=10))
