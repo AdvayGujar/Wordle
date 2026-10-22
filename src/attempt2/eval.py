@@ -31,7 +31,8 @@ from random import Random
 import numpy as np
 
 from attempt2 import config
-from attempt2.wordleEnv import EVAL_MODE, WordleEnv
+from attempt2.splits import validationSecrets
+from attempt2.wordleEnv import EVAL_MODE, TRAIN_MODE, WordleEnv
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,20 @@ def _playOneGame(env, policy, secret, seed):
         "firstGuess": env.history[0][0],
         "illegalActions": illegalActions,
     }
+
+
+def evaluateValidation(policy, name="validation", **options):
+    """Score a policy on the validation slice of the training secrets.
+
+    WHY A SEPARATE FUNCTION: the validation secrets are training secrets, so the
+    environment must be in train mode to play them - an eval-mode env would (correctly)
+    refuse. Keeping this in one place means no training script can accidentally point the
+    held-out evaluation at the validation set, or the validation evaluation at the
+    held-out set.
+    """
+    return evaluate(
+        policy, validationSecrets(), name=name, mode=TRAIN_MODE, **options
+    )
 
 
 def formatResultsTable(results):

@@ -33,6 +33,13 @@ SEED = 42
 N_TRAIN_SECRETS = 1915
 N_TEST_SECRETS = 400
 
+# WHY A VALIDATION SLICE: the held-out 400 may be read once, for the final table (§8.6).
+# Everything else - the learning curve, the choice of hyper-parameters, the decision to
+# stop training - has to be decided on data the agent has not been tuned against. So 200
+# of the 1,915 training secrets are held back from *training* and used for validation.
+# The agent trains on 1,715 and is judged on 200 during training and on 400 at the end.
+N_VALIDATION_SECRETS = 200
+
 # ---------------------------------------------------------------------------
 # Game rules
 # ---------------------------------------------------------------------------

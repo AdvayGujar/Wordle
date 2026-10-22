@@ -35,7 +35,7 @@ from gymnasium import spaces
 from attempt2 import config
 from attempt2.actionMask import maskFor
 from attempt2.observation import observationBounds, observationFor, observationWidth
-from attempt2.splits import assertNoLeakage, heldOutSecrets, trainSecrets
+from attempt2.splits import assertNoLeakage, heldOutSecrets, trainSecrets, trainingSecrets
 from wordle.feedbackTable import decodePattern, feedbackTable
 from wordle.vocabulary import answersVocab, loadAnswers
 
@@ -53,7 +53,8 @@ class WordleEnv(gym.Env):
 
     def __init__(self, mode=TRAIN_MODE, observationMode=config.OBSERVATION_MODE,
                  stepPenalty=config.STEP_PENALTY, winReward=config.WIN_REWARD,
-                 lossReward=config.LOSS_REWARD, maxGuesses=config.MAX_GUESSES):
+                 lossReward=config.LOSS_REWARD, maxGuesses=config.MAX_GUESSES,
+                 secrets=None):
         super().__init__()
 
         if mode not in MODES:
@@ -79,6 +80,21 @@ class WordleEnv(gym.Env):
         # against the pool, and a set lookup is O(1) instead of a scan of 1,915 words on
         # every episode.
         self._poolSet = set(self._secretPool)
+
+        # WHY AN OPTIONAL SUBSET: training uses the training half minus the validation
+        # slice, so the environment has to be able to sample from a smaller pool. The
+        # subset is checked against this mode's pool, so it can never widen the pool and
+        # the leak guard still holds.
+        if secrets is not None:
+            requested = list(secrets)
+            outside = [word for word in requested if word not in self._poolSet]
+            if outside:
+                raise ValueError(
+                    "%d secret(s) are not in the %s pool, e.g. %r"
+                    % (len(outside), mode, outside[0])
+                )
+            self._secretPool = requested
+            self._poolSet = set(requested)
 
         answers = loadAnswers()
         low, high = observationBounds(observationMode)
@@ -226,3 +242,13 @@ class WordleEnv(gym.Env):
     @property
     def guessesUsed(self):
         return len(self._history)
+
+
+def trainingEnv(**options):
+    """An environment that samples only the secrets the agent may train on.
+
+    WHY A HELPER: the training secrets are the training half *minus* the validation
+    slice, and every trainer has to use that exact pool. Spelling it out in each trainer
+    would be four chances to spell it differently.
+    """
+    return WordleEnv(mode=TRAIN_MODE, secrets=trainingSecrets(), **options)

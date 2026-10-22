@@ -36,6 +36,22 @@ def heldOutSecrets():
     return _split()[1]
 
 
+def trainingSecrets():
+    """The secrets the agent trains on: the training half minus the validation slice."""
+    return trainSecrets()[:-config.N_VALIDATION_SECRETS]
+
+
+def validationSecrets():
+    """The validation slice: training secrets the agent does NOT train on.
+
+    WHY A SLICE OF THE TRAINING HALF: the held-out 400 may be read once, for the final
+    table. The learning curve, the hyper-parameters and the decision to stop training all
+    have to be decided on something else, or the final number is a number that was tuned
+    on the test set.
+    """
+    return trainSecrets()[-config.N_VALIDATION_SECRETS:]
+
+
 def assertNoLeakage(train=None, test=None):
     """Raise ValueError if the two halves overlap, or if either is the wrong size.
 
