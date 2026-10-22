@@ -28,11 +28,17 @@ from attempt2.policies import greedyPolicyFromScorer
 from attempt2.splits import heldOutSecrets
 from wordle.vocabulary import answersVocab
 
-ARTIFACT_DIR = Path(__file__).resolve().parent / "artifacts"
+HERE = Path(__file__).resolve().parent
+ARTIFACT_DIR = HERE / "artifacts"
+
+# WHY THE FIGURES SIT NEXT TO THE CODE AND NOT IN `artifacts/`: the README embeds the
+# comparison chart, so it has to be a tracked file. Attempt 1 does the same thing with
+# `accuracy.png`. Everything else the run produces - the models, the curves, the JSON -
+# is a generated artifact and stays ignored.
 RESULTS_FILE = ARTIFACT_DIR / "experiment-results.json"
-COMPARISON_PLOT = ARTIFACT_DIR / "comparison.png"
-CURVES_PLOT = ARTIFACT_DIR / "learning-curves.png"
-FIRST_GUESS_PLOT = ARTIFACT_DIR / "first-guess.png"
+COMPARISON_PLOT = HERE / "comparison.png"
+CURVES_PLOT = HERE / "learning-curves.png"
+FIRST_GUESS_PLOT = HERE / "first-guess.png"
 
 ALGORITHMS = ("reinforce", "dqn", "ppo")
 

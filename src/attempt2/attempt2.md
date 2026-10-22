@@ -953,7 +953,11 @@ memorised. See `src/attempt3/attempt3.md`.
 
 ### 13.4 The figures
 
-- `comparison.png` — every policy's average guesses on the held-out secrets.
+- `comparison.png` — every policy's average guesses on the held-out secrets (this is the
+  one the README embeds).
+- The three figures sit next to the code in `src/attempt2/` rather than in `artifacts/`,
+  because the README has to link to a tracked file. Attempt 1 does the same with
+  `accuracy.png`.
 - `learning-curves.png` — each algorithm's training curve **with its validation points on
   the same axes**, because a falling training curve on its own is exactly the thing that
   hid PPO's overfitting.
