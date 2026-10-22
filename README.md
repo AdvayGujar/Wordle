@@ -47,22 +47,26 @@ The learned model recovers the consistency rule, but it does **not** beat the ru
 filter. That is expected: the posterior is uniform over consistent candidates. The remaining
 headroom is strategy, not classification.
 
-Attempt 2 (reinforcement learning) is in progress. **Phases A and B are built**: a Gymnasium
+Attempt 2 (reinforcement learning) is in progress. **Phases A–C are built**: a Gymnasium
 `Env` with legal-action masking, a fixed-width observation, a secret split that keeps 400
-answers held out, a reward of +1 for a win minus 0.05 per guess, one measurement harness, and
-the baseline policies the learned agent has to beat.
+answers held out, a reward of +1 for a win minus 0.05 per guess, one measurement harness,
+the baseline policies, and three algorithms (REINFORCE, DQN, PPO) trained in PyTorch.
 
-Measured on the 400 held-out secrets:
+On the 400 held-out secrets, measured by the same harness:
 
 | Policy | Win rate | Avg guesses (wins) |
 |---|---|---|
-| masked random | 98.5% | 4.07 |
 | masked random, fixed opener `crane` | 99.0% | **3.80** |
-| unmasked random (no mask) | 0.2% | — |
+| **REINFORCE (250k episodes)** | 97.8% | **3.85** |
 | Attempt-1 solver (model + rule mask) | 97.8% | 3.90 |
+| PPO (150k episodes) | 98.8% | 4.01 |
+| masked random | 98.5% | 4.07 |
+| DQN (150k episodes) | 95.8% | 4.34 |
 
-So the bar for the learned agent is **fewer than 3.80 guesses on wins** — beating Attempt 1's
-3.90 is not enough. The learning algorithms (REINFORCE / DQN / PPO) are not built yet.
+So the agent **beats the random baseline and beats Attempt 1**, but it does not beat one
+hand-picked opening word. Measured reason: openers differ by 0.46 guesses while a single
+game is noisy by about 1.0, so ranking them needs ~100 samples each — ~230,000 episodes
+just to sweep the 2,315 openers once.
 
 The `RL stack is pinned in requirements.txt`, and `feedbackTable.py` precomputes every
 answer/answer feedback pair once (~5 MB, built lazily) so RL steps are array lookups instead
@@ -91,15 +95,22 @@ src/
     └── attempt1.md       # full Attempt-1 write-up
 └── attempt2/
     ├── config.py         # every Attempt-2 constant (seed, split, reward, observation)
-    ├── splits.py         # train / held-out secrets, with a no-leakage assertion
+    ├── splits.py         # train / validation / held-out secrets, with a no-leakage assertion
     ├── observation.py    # evidence -> one fixed-width vector
     ├── actionMask.py     # which of the 2,315 answers are still legal to guess
     ├── wordleEnv.py      # the Gymnasium environment
     ├── eval.py           # the one measurement harness every policy is scored with
     ├── baselines.py      # the policies the learned agent has to beat
     ├── smoke.py          # end-to-end smoke test
+    ├── policies.py       # the networks, and masked action selection
+    ├── rollout.py        # the episode loop all three algorithms share
+    ├── replayBuffer.py   # the replay buffer DQN learns from
+    ├── reinforce.py      # REINFORCE with a value baseline
+    ├── dqn.py            # masked DQN with a target network
+    ├── ppo.py            # clipped-surrogate PPO
+    ├── train.py          # the training CLI
     └── attempt2.md       # what Attempt 2 is doing, and why
-tests/                    # 260 tests
+tests/                    # 295 tests
 ```
 
 ## Setup

@@ -11,21 +11,25 @@ agent's results as the phases land.
 | Piece | Purpose |
 |---|---|
 | `config.py` | Every constant Attempt 2 uses: seed, split sizes, reward weights, guess limit, observation mode |
-| `splits.py` | The train / held-out secret lists, plus a no-leakage assertion |
+| `splits.py` | The train / held-out / validation secret lists, plus a no-leakage assertion |
 | `observation.py` | Evidence history → one fixed-length vector the policy can read |
 | `actionMask.py` | Which of the 2,315 answers are still legal to guess, given the evidence |
 | `wordleEnv.py` | The Gymnasium environment: one episode = one Wordle game |
 | `eval.py` | The single measurement harness every policy is scored with |
 | `baselines.py` | The policies the learned agent has to beat |
 | `smoke.py` | The end-to-end smoke test: can the environment be played and scored? |
+| `policies.py` | The networks, and the masked action selection all three algorithms share |
+| `rollout.py` | The episode loop the three algorithms share |
+| `replayBuffer.py` | The uniform replay buffer DQN learns from |
+| `reinforce.py` | REINFORCE with a value baseline |
+| `dqn.py` | Masked DQN with a target network |
+| `ppo.py` | Clipped-surrogate PPO with a value head |
+| `train.py` | The training CLI: model, learning curve and results |
 
 **Files (planned)**
 
 | Piece | Purpose |
 |---|---|
-| `policies.py` | The network(s), and masked action selection |
-| `reinforce.py`, `dqn.py`, `ppo.py` | The three algorithms |
-| `replayBuffer.py`, `train.py` | The replay buffer and the training CLI |
 | `experiment.py` | Runs everything and produces the comparison tables and plots |
 | `attempt2.md` | This file |
 
@@ -494,10 +498,144 @@ vectorised environment machinery is needed.
 
 ---
 
-## 9. How to run and test
+## 9. The learning algorithms (Phase C)
+
+### 9.1 What is shared and what is not
+
+The three algorithms differ in their **loss**, not in how a game is played. The episode
+loop lives once, in `rollout.py`, so a difference between their learning curves is a
+difference in the algorithm and not a difference in the rules of the game.
+
+| Module | What it does |
+|---|---|
+| `policies.py` | `MaskedPolicyNet` (observation → 2,315 logits + a value), `QNetwork`, the masked log-probabilities, and `selectAction` |
+| `rollout.py` | `collectEpisode`, `episodeStream`, `discountedReturns` — the shared loop |
+| `replayBuffer.py` | A uniform buffer; it stores the **next mask** as well as the next observation |
+| `reinforce.py` | REINFORCE with a learned value baseline |
+| `dqn.py` | DQN with a target network and ε-greedy exploration over the legal actions |
+| `ppo.py` | PPO with generalised advantage estimation and a clipped surrogate |
+| `train.py` | The CLI: `--algo`, `--episodes`, `--seed`, `--learning-rate`, and the artifacts it writes |
+
+### 9.2 The mask, in all three algorithms
+
+The mask is applied to the **logits before the softmax**, so an illegal action has
+probability exactly zero and receives exactly zero gradient. It appears in three places,
+and all three have to be right:
+
+1. **Choosing** — `selectAction` samples or takes the argmax over the legal actions only.
+2. **DQN's exploration** — ε-greedy picks a random *legal* action. Picking a random answer
+   and hoping it is legal would waste most of the steps.
+3. **DQN's Bellman target** — the maximum is taken over the legal actions of the *next*
+   state, not over all 2,315 answers. A target that included the eliminated answers would
+   ask the network to predict the value of guesses that cannot be made.
+
+### 9.3 Why the exploration schedules are annealed
+
+This was the single most consequential design decision in Phase C, and it was made from a
+measurement rather than an intuition. Measured directly (400 games per opener, masked
+random afterwards):
+
+| Opener | Average guesses |
+|---|---|
+| `slate` | 3.795 |
+| `crane` | 3.860 |
+| `raise` | 3.865 |
+| `roast` | 3.873 |
+| `actor` | 3.940 |
+| `fight` | 4.095 |
+| `aback` | 4.255 |
+
+**The openers differ by 0.46 guesses. The noise in a single game is about 1.0 guesses.**
+Ranking two openers that differ by 0.10 guesses needs roughly 400 samples *each*. Sweeping
+all 2,315 openers once, with enough samples to rank them, is about 230,000 episodes.
+
+So both schedules are annealed:
+
+- **REINFORCE's entropy bonus** goes from 0.2 down to 0.01 across training. A fixed strong
+  bonus keeps the policy spread over all 2,315 answers and it never commits; a fixed weak
+  (or zero) bonus lets it collapse onto whichever answer looked lucky in the first few
+  hundred episodes, before any of them had been sampled often enough to be ranked.
+- **DQN's ε** goes from 1.0 down to 0.05, measured in *steps* rather than episodes so the
+  number of guesses per episode does not change how fast exploration fades.
+
+### 9.4 Results — validation (during training) and held-out (read once at the end)
+
+| Algorithm | Episodes | Time | Validation | **Held-out (400)** | Opener it chose |
+|---|---|---|---|---|---|
+| REINFORCE | 250,000 | 27 min | 98.0% win, **3.81** guesses | 97.8% win, **3.85** guesses | `actor` |
+| PPO | 150,000 | 18 min | 100% win, 3.98 guesses | 98.8% win, 4.01 guesses | `slate` |
+| DQN | 150,000 | 22 min | 96.5% win, 4.27 guesses | 95.8% win, 4.34 guesses | `fight` |
+
+Against the Phase B baselines, on the same 400 held-out secrets:
+
+| Policy | Win rate | Avg guesses (wins) |
+|---|---|---|
+| masked random, fixed opener `crane` | 99.0% | **3.80** |
+| **REINFORCE (250k episodes)** | 97.8% | **3.85** |
+| Attempt-1 solver (model + rule mask) | 97.8% | 3.90 |
+| PPO (150k episodes) | 98.8% | 4.01 |
+| masked random | 98.5% | 4.07 |
+| DQN (150k episodes) | 95.8% | 4.34 |
+
+### 9.5 Reading this honestly
+
+- **The agent learns. It beats the random baseline and it beats Attempt 1.** REINFORCE
+  reaches 3.85 guesses against masked random's 4.07 and the Attempt-1 solver's 3.90. On
+  the opener alone that is a real difference: the agent chose `actor` (3.940 with random
+  play afterwards) and reached 3.85, so **its later turns are worth about 0.09 guesses**
+  over picking at random among the legal answers.
+- **It does not beat one hand-picked word.** `crane` + random scores 3.80, and the agent
+  never found an opener that beats it. Given §9.3 — the signal is an order of magnitude
+  smaller than the noise — that is the expected outcome, not a surprise, and it is the
+  honest ceiling of this attempt.
+- **PPO found the best opener in the sample and still lost to it.** It chose `slate`
+  (3.795 with random play) and scored 4.01. Its *later* greedy choices are worse than a
+  random pick among the legal answers. A confidently wrong policy loses to a random legal
+  guess, and evaluating greedily is not a free win for a partially-trained agent.
+- **DQN is the only algorithm below the random baseline.** 2,315 actions is too many for a
+  value-based method to generalise over from a 60-dimensional state.
+- **The validation numbers track the held-out numbers closely** (3.81 vs 3.85 for
+  REINFORCE), which is the point of having a validation slice at all.
+
+### 9.6 A bug worth recording
+
+The REINFORCE policy loss was first built from a **detached** log-probability — the one
+recorded when the action was chosen. The gradient therefore never reached the policy head,
+and only the value head ever learned. The agent looked exactly like it was training: the
+loss moved, a curve was plotted, the validation number was printed every 25,000 episodes.
+Nothing changed, because the policy was not being updated at all.
+
+It was found by measuring the thing the loss is supposed to measure: the learning rate made
+no difference whatsoever to the policy's output, across four orders of magnitude, which is
+not something a working learner does.
+
+`tests/test_attempt2Learning.py` now asserts that the policy head receives a non-zero
+gradient, because **"the loss is finite" is not the same as "the policy is learning"**.
+
+### 9.7 The training setup
+
+```
+PYTHONPATH=src .venv/bin/python -m attempt2.train --algo reinforce --episodes 250000 \
+    --learning-rate 0.01 --entropy-start 0.2 --entropy-end 0.01 --evaluation-every 25000
+```
+
+The CLI writes `artifacts/<algo>-model.pt`, `artifacts/<algo>-curve.csv` and
+`artifacts/<algo>-results.json`. The artifacts are generated files and are not tracked.
+
+The options are matched against the trainer's signature, so passing an option an algorithm
+does not use (`--entropy-start` to DQN, say) is reported and ignored rather than crashing
+halfway through a long run.
+
+**Training never touches the held-out 400.** The training environment samples only the
+1,715 training secrets; the validation slice (200) is used for the learning curve and for
+every decision made during training; the held-out 400 were read once, at the end.
+
+---
+
+## 10. How to run and test
 
 ```bash
-# the whole suite (260 tests: 196 pre-existing + 64 new)
+# the whole suite (295 tests: 196 pre-existing + 99 new)
 .venv/bin/python -m pytest tests/ -q
 
 # the Attempt-2 tests on their own
@@ -508,6 +646,10 @@ PYTHONPATH=src .venv/bin/python -m attempt2.smoke --games 50
 
 # the baseline table, on the 400 held-out secrets
 PYTHONPATH=src .venv/bin/python -m attempt2.baselines
+
+# train an agent (writes the model, the curve and the results)
+PYTHONPATH=src .venv/bin/python -m attempt2.train --algo reinforce --episodes 250000 \
+    --learning-rate 0.01 --entropy-start 0.2 --entropy-end 0.01
 
 # drive the environment by hand
 PYTHONPATH=src .venv/bin/python -c "
@@ -532,24 +674,26 @@ contract violation before an algorithm is built on top of it.
 | `tests/test_attempt2Env.py` | The Gymnasium contract, the reward values, that training never samples a held-out secret, and that a forced secret is checked against the pool |
 | `tests/test_attempt2Eval.py` | The harness counts wins, guesses and illegal actions correctly, and refuses the wrong secrets |
 | `tests/test_attempt2Baselines.py` | Each baseline is what its name says |
+| `tests/test_attempt2Policies.py` | An illegal action has no probability and no gradient; the greedy and sampling choices are legal |
+| `tests/test_attempt2ReplayBuffer.py` | The buffer keeps the next mask, drops the oldest transitions, and reports its own sizes |
+| `tests/test_attempt2Learning.py` | The policy head receives a gradient (the regression test for §9.6), DQN's target respects the next mask, PPO's advantages do not cross an episode |
 
 ---
 
-## 10. Phases C–D — what comes next
+## 11. Phase D — what comes next
 
 | Phase | Modules | The question it answers |
 |---|---|---|
-| **C** | `policies.py`, `replayBuffer.py`, `reinforce.py`, `dqn.py`, `ppo.py`, `train.py` | Can it learn? REINFORCE first — if the simplest algorithm cannot show a non-flat curve, adding two more only hides the bug |
 | **D** | `experiment.py`, this file | What did it learn on its own, and where does it fall short? |
 
-The bar Phase C has to clear is the one measured in §7.2: **fewer than 3.80 guesses on
-wins** over the 400 held-out secrets, and a first-guess distribution that is *not* uniform —
-an agent that picks `crane` every time and then plays masked random has learned nothing, and
-one that concentrates on a better opener has learned something real.
+Phase C cleared part of the bar set in §7.2 — REINFORCE beat masked random (4.07) and the
+Attempt-1 solver (3.90) — and missed the rest: the hand-picked `crane` opener is still
+3.80, and no agent found an opener better than it. Phase D turns all of this into the final
+tables and plots, and states the limits of the result.
 
 ---
 
-## 11. Limitations and open questions
+## 12. Limitations and open questions
 
 - **The agent cannot play a non-answer.** The action space is the 2,315 answers, so the agent
   can never use a legal probe word that is not a possible secret. This is a real restriction
@@ -565,7 +709,16 @@ one that concentrates on a better opener has learned something real.
   which penalty produced which number.
 - **The split is fixed at seed 42.** One split means one held-out set. Differences of a
   percentage point on 400 games are within noise; the report should treat them as such.
-- **Phase C is the open risk.** The environment is fast and correct, but whether a policy
-  gradient over a 2,315-action space with a hard mask converges on this task is exactly what
-  Phases C and D have to find out — the honest outcome may be "it learns a good opener and
-  little else".
+- **The strategy headroom is mostly not reachable from the reward alone.** Phase C
+  measured why: openers differ by 0.46 guesses and a single game is noisy by about 1.0, so
+  ranking them needs ~100 samples each and ~230,000 episodes to sweep the action space once.
+  The agent beat the random baseline and Attempt 1, and it did not beat one hand-picked
+  word. That is the honest ceiling of this attempt, and it is a statement about the signal,
+  not about the implementation.
+- **Greedy evaluation is not free.** PPO found the best opener in the sample and still
+  scored worse than that opener played with random legal guesses afterwards, because its
+  later turns were confidently wrong. A policy that is still learning should be judged
+  against the rules, not against its own confidence.
+- **Phase D is the open risk.** The environment is fast and correct and the algorithms
+  train, but the final tables have to state plainly that the learned agent ties a
+  hand-picked opener rather than beating it.
