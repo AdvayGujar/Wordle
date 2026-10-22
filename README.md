@@ -47,16 +47,16 @@ The learned model recovers the consistency rule, but it does **not** beat the ru
 filter. That is expected: the posterior is uniform over consistent candidates. The remaining
 headroom is strategy, not classification.
 
-Attempt 2 (reinforcement learning) is in progress. **Phases A–C are built**: a Gymnasium
-`Env` with legal-action masking, a fixed-width observation, a secret split that keeps 400
-answers held out, a reward of +1 for a win minus 0.05 per guess, one measurement harness,
-the baseline policies, and three algorithms (REINFORCE, DQN, PPO) trained in PyTorch.
+Attempt 2 (reinforcement learning) is **complete**: a Gymnasium `Env` with legal-action
+masking, a fixed-width observation, a secret split that keeps 400 answers held out, a
+reward of +1 for a win minus 0.05 per guess, one measurement harness, the baseline policies,
+and three algorithms (REINFORCE, DQN, PPO) trained in PyTorch.
 
 On the 400 held-out secrets, measured by the same harness:
 
 | Policy | Win rate | Avg guesses (wins) |
 |---|---|---|
-| masked random, fixed opener `crane` | 99.0% | **3.80** |
+| best opener `slate` + masked random | 99.0% | **3.77** |
 | **REINFORCE (250k episodes)** | 97.8% | **3.85** |
 | Attempt-1 solver (model + rule mask) | 97.8% | 3.90 |
 | PPO (150k episodes) | 98.8% | 4.01 |
@@ -77,6 +77,24 @@ Two things explain the attempt:
 - The best openers are all built from the same common letters (18 of the top 20 contain
   `a`, 18 contain `e`; six of them are permutations of the same five letters). The
   information in an opener is in *which common letters it tests*, not their arrangement.
+
+**The most important result is the generalisation gap.** Scored on three sets of secrets
+(masked random is identical on all three, so the sets are equally hard):
+
+| Policy | training 400 | validation 200 | held-out 400 |
+|---|---|---|---|
+| PPO | 3.590 | 3.985 | 4.037 |
+| REINFORCE | 3.995 | 3.850 | 3.895 |
+| DQN | 4.128 | 4.330 | 4.412 |
+
+PPO's 0.45-guess advantage on the training secrets is memorisation, and it is no better
+than random on the held-out ones. The reason is structural: the observation is the feedback
+history, but the best next guess depends on the set of still-consistent candidates, which
+the observation does not contain — so a learned policy can only memorise the training
+distribution's average.
+
+**Attempt 3 (`src/attempt3/attempt3.md`) is the information-theoretic attempt**: compute
+the strategy instead of learning it, with the full mathematics and a four-phase build plan.
 
 The `RL stack is pinned in requirements.txt`, and `feedbackTable.py` precomputes every
 answer/answer feedback pair once (~5 MB, built lazily) so RL steps are array lookups instead
@@ -120,7 +138,10 @@ src/
     ├── ppo.py            # clipped-surrogate PPO
     ├── train.py          # the training CLI
     ├── openerSearch.py   # exhaustive search for the best opening word
+    ├── experiment.py     # the final table and the figures
     └── attempt2.md       # what Attempt 2 is doing, and why
+src/attempt3/
+└── attempt3.md           # the information-theoretic attempt: the math and the plan
 tests/                    # 303 tests
 ```
 

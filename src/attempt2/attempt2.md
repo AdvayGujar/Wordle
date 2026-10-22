@@ -26,6 +26,7 @@ agent's results as the phases land.
 | `ppo.py` | Clipped-surrogate PPO with a value head |
 | `train.py` | The training CLI: model, learning curve and results |
 | `openerSearch.py` | The exhaustive search for the best opening word |
+| `experiment.py` | Evaluates every policy on the held-out secrets and writes the figures |
 
 **Files (planned)**
 
@@ -796,6 +797,9 @@ PYTHONPATH=src .venv/bin/python -m attempt2.train --algo reinforce --episodes 25
 # search all 2,315 openers for the best one (about 1.2 million games)
 PYTHONPATH=src .venv/bin/python -m attempt2.openerSearch --games 400 --refine-games 4000
 
+# the whole experiment: every policy on the held-out secrets, plus the figures
+PYTHONPATH=src .venv/bin/python -m attempt2.experiment
+
 # drive the environment by hand
 PYTHONPATH=src .venv/bin/python -c "
 from attempt2.wordleEnv import WordleEnv
@@ -826,16 +830,84 @@ contract violation before an algorithm is built on top of it.
 
 ---
 
-## 12. Phase D — what comes next
+## 12. The final results (Phase D)
 
-| Phase | Modules | The question it answers |
-|---|---|---|
-| **D** | `experiment.py`, this file | What did it learn on its own, and where does it fall short? |
+`experiment.py` evaluates every policy — the baselines and the three trained agents — on
+the same 400 held-out secrets, through the same harness, and writes the table, the three
+figures and `results.json`. It never trains: the agents are loaded from `artifacts/`, so
+the experiment can be re-run and re-plotted without repeating 27 minutes of training per
+algorithm.
 
-Phase C cleared part of the bar set in §7.2 — REINFORCE beat masked random (4.07) and the
-Attempt-1 solver (3.90) — and missed the rest: the hand-picked `crane` opener is still
-3.80, and no agent found an opener better than it. Phase D turns all of this into the final
-tables and plots, and states the limits of the result.
+### 12.1 Every policy on the same 400 held-out secrets
+
+| Policy | Win rate | Avg guesses (wins) | Avg guesses (all) | Opens with |
+|---|---|---|---|---|
+| masked random | 98.5% | 4.07 | 4.10 | random |
+| masked random, fixed opener `crane` | 99.0% | 3.80 | 3.83 | `crane` |
+| best opener `slate` + masked random | 99.0% | **3.77** | 3.79 | `slate` |
+| **REINFORCE (learned)** | 97.8% | **3.85** | 3.90 | `actor` |
+| Attempt-1 solver (model + rule mask) | 97.8% | 3.90 | 3.95 | `crane` |
+| PPO (learned) | 98.8% | 4.01 | 4.04 | `slate` |
+| DQN (learned) | 95.8% | 4.34 | 4.41 | `fight` |
+
+**The honest summary:** one learned agent (REINFORCE) beats both the random baseline
+(4.07) and the Attempt-1 solver (3.90), and none of them beats one hand-picked opening
+word (3.77).
+
+### 12.2 The finding that matters most: the generalisation gap
+
+The learning curves say PPO improved a lot — its training average fell from 4.05 to 3.59.
+Its held-out score says otherwise. The same policy, scored on three different sets of
+secrets:
+
+| Policy | training 400 | validation 200 | held-out 400 |
+|---|---|---|---|
+| masked random | 4.098 | 4.055 | 4.090 |
+| **REINFORCE** | 3.995 | 3.850 | **3.895** |
+| **PPO** | **3.590** | 3.985 | **4.037** |
+| DQN | 4.128 | 4.330 | 4.412 |
+
+Masked random is identical on all three sets (4.06–4.10), so the sets are equally hard.
+The differences are the policies'. **PPO's 0.45-guess advantage on the training secrets
+is almost entirely memorisation**, and on the held-out secrets it is no better than random.
+
+**Why a policy can overfit when it never sees the secret.** The observation is the
+feedback history — it does *not* contain the set of still-consistent candidates. But the
+best next guess depends on that set, not on the feedback summary. Two different candidate
+sets can produce the same feedback and want different guesses. The network cannot see the
+difference, so the best it can do is learn the average over the candidate sets it
+encountered — and PPO learned that average *confidently*, having 250,000 episodes to
+memorise it. On the held-out secrets the candidate sets are different, the memorised
+answer is uncorrelated with the right one, and a confident wrong guess costs more than a
+random one would.
+
+REINFORCE, with a weaker signal and no strong convergence, memorised less: a 0.10-guess
+gap, and it transfers.
+
+**This is the precise gap that an information-theoretic attempt closes.** A picker that
+*computes* the candidate set from the feedback and picks the best guess for it has no such
+gap: the candidate set is recoverable exactly, and the choice does not have to be
+memorised. See `src/attempt3/attempt3.md`.
+
+### 12.3 What each agent learned
+
+- **REINFORCE** learned a good *strategy* and a mediocre opener. Its later play beats
+  random legal guessing (3.68 against 3.77 with the same opener), but its opener `actor`
+  is worth 0.22 guesses to it.
+- **PPO** learned the best opener of all 2,315 (§10) and a *poor* strategy — its later
+  greedy choices are worse than a random legal guess, which is what its overfitted
+  confident policy predicts.
+- **DQN** learned nothing useful. 2,315 actions is too many for a value-based method to
+  generalise over from a 60-dimensional state, and it is the only policy below the random
+  baseline on every set.
+
+### 12.4 The figures
+
+- `comparison.png` — every policy's average guesses on the held-out secrets.
+- `learning-curves.png` — each algorithm's training curve **with its validation points on
+  the same axes**, because a falling training curve on its own is exactly the thing that
+  hid PPO's overfitting.
+- `first-guess.png` — the opening word each policy used over the held-out games.
 
 ---
 
@@ -865,6 +937,13 @@ tables and plots, and states the limits of the result.
   scored worse than that opener played with random legal guesses afterwards, because its
   later turns were confidently wrong. A policy that is still learning should be judged
   against the rules, not against its own confidence.
-- **Phase D is the open risk.** The environment is fast and correct and the algorithms
-  train, but the final tables have to state plainly that the learned agent ties a
-  hand-picked opener rather than beating it.
+- **The observation does not determine the candidate set.** This is the deepest limitation
+  and it is measured (§12.2): the policy sees the feedback history, but the best next guess
+  depends on which words are still consistent — information the observation does not
+  contain. A learned policy can only learn the training distribution's average, and a
+  confident policy over that average transfers badly (PPO: 3.59 on the training secrets,
+  4.04 on the held-out ones — no better than random). The information-theoretic approach in
+  Attempt 3 does not have this problem, because it computes the candidate set exactly.
+- **One learned agent beats the baselines, and none beats one word.** REINFORCE's 3.85
+  beats masked random (4.07) and the Attempt-1 solver (3.90); the hand-picked opener is
+  3.77. That is the whole of Attempt 2's result.
