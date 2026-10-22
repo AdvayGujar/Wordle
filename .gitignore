@@ -8,3 +8,6 @@ __pycache__/
 src/attempt1/model.joblib
 src/attempt1/results.json
 src/attempt1/playResults.json
+
+# Generated Attempt 2 artifacts (reproducible via attempt2/train.py)
+src/attempt2/artifacts/
