@@ -47,9 +47,13 @@ The learned model recovers the consistency rule, but it does **not** beat the ru
 filter. That is expected: the posterior is uniform over consistent candidates. The remaining
 headroom is strategy, not classification.
 
-Attempt 2 (reinforcement learning) has not started. Its pre-flight is in place: the RL stack is
-pinned in `requirements.txt`, and `feedbackTable.py` precomputes every answer/answer feedback pair
-once (~5 MB, built lazily) so RL steps are array lookups instead of Python calls.
+Attempt 2 (reinforcement learning) is in progress. Its **Phase A — the environment — is
+built**: a Gymnasium `Env` with legal-action masking, a fixed-width observation, a secret
+split that keeps 400 answers held out, and a reward of +1 for a win minus 0.05 per guess.
+The `RL stack is pinned in `requirements.txt`, and `feedbackTable.py` precomputes every
+answer/answer feedback pair once (~5 MB, built lazily) so RL steps are array lookups instead
+of Python calls. The learning algorithms (REINFORCE / DQN / PPO) and the comparison against
+Attempt 1 are not built yet.
 
 ![Consistency skill vs rounds](src/attempt1/accuracy.png)
 
@@ -72,7 +76,13 @@ src/
     ├── trainCompare.py   # baselines, training, tables, plot, analysis
     ├── play.py           # interactive / --auto solver
     └── attempt1.md       # full Attempt-1 write-up
-tests/                    # 196 tests
+└── attempt2/
+    ├── config.py         # every Attempt-2 constant (seed, split, reward, observation)
+    ├── splits.py         # train / held-out secrets, with a no-leakage assertion
+    ├── observation.py    # evidence -> one fixed-width vector
+    ├── actionMask.py     # which of the 2,315 answers are still legal to guess
+    └── wordleEnv.py      # the Gymnasium environment
+tests/                    # 238 tests
 ```
 
 ## Setup
