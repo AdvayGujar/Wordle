@@ -81,7 +81,8 @@ src/
     ├── splits.py         # train / held-out secrets, with a no-leakage assertion
     ├── observation.py    # evidence -> one fixed-width vector
     ├── actionMask.py     # which of the 2,315 answers are still legal to guess
-    └── wordleEnv.py      # the Gymnasium environment
+    ├── wordleEnv.py      # the Gymnasium environment
+    └── attempt2.md       # what Attempt 2 is doing, and why
 tests/                    # 238 tests
 ```
 
