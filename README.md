@@ -1,14 +1,24 @@
-# Wordle Solver — Supervised Candidate-Consistency
+# Wordle Solver — four attempts at a Wordle solver
 
-A Wordle solver and a supervised-learning experiment built around reusable, tested game
-rules. The project asks a learnable question:
+A Wordle solver built around reusable, tested game rules, and a series of attempts to
+solve the game by different means. The project asks a learnable question:
 
 > **Given the evidence so far, is this candidate word consistent with every round?**
 
-A model scores all 2,315 possible answers with that binary classifier, and the solver uses those
-scores plus the exact feedback rules to play.
+and then asks a harder one:
 
-## Why this framing
+> **Having narrowed the field with the rules, which word should be guessed next?**
+
+| Attempt | What it is | Status |
+|---|---|---|
+| 1 | supervised candidate-consistency scoring | ✅ [`src/attempt1/attempt1.md`](src/attempt1/attempt1.md) |
+| 2 | reinforcement learning — the agent learns a strategy | ✅ [`src/attempt2/attempt2.md`](src/attempt2/attempt2.md) |
+| 3 | information theory — *compute* the strategy | 📋 [`src/attempt3/attempt3.md`](src/attempt3/attempt3.md) |
+| 4 | the Module-5 math, written from scratch in NumPy | 📋 `plan.md` §10 |
+
+---
+
+## Why the first framing did not work
 
 The obvious formulation — 2,315-class classification of the secret word — does not work:
 
@@ -18,11 +28,19 @@ The obvious formulation — 2,315-class classification of the secret word — do
    is equally likely. A classifier can learn the rules but cannot rank the true secret above another
    consistent candidate.
 
-Attempt 1 was therefore reframed to **candidate-consistency scoring**. The full reasoning, data,
-features, model comparison and limitations are in
-[`src/attempt1/attempt1.md`](src/attempt1/attempt1.md).
+Attempt 1 was therefore reframed to **candidate-consistency scoring**: a binary model that scores
+each of the 2,315 answers with "is this candidate consistent with every round?", which the solver
+then combines with the exact feedback rules.
+
+That model recovers the rule, and still cannot beat the rule-based candidate filter — because the
+posterior is uniform over consistent candidates. The remaining headroom is **strategy, not
+classification**, and that is what Attempts 2–4 are about.
+
+---
 
 ## Results
+
+### Attempt 1 — supervised candidate-consistency
 
 Consistency model on held-out candidate pairs, rounds 1–5:
 
@@ -43,14 +61,13 @@ Solver over 400 held-out games, fixed opener `crane`:
 | fixed-opener + random-consistent | 97.5% | 3.83 |
 | random-legal / fixed-word | 0.0% | — |
 
-The learned model recovers the consistency rule, but it does **not** beat the rule-based candidate
-filter. That is expected: the posterior is uniform over consistent candidates. The remaining
-headroom is strategy, not classification.
+![Consistency skill vs rounds](src/attempt1/accuracy.png)
 
-Attempt 2 (reinforcement learning) is **complete**: a Gymnasium `Env` with legal-action
-masking, a fixed-width observation, a secret split that keeps 400 answers held out, a
-reward of +1 for a win minus 0.05 per guess, one measurement harness, the baseline policies,
-and three algorithms (REINFORCE, DQN, PPO) trained in PyTorch.
+### Attempt 2 — reinforcement learning
+
+A Gymnasium `Env` with legal-action masking, a fixed-width observation, a secret split that
+keeps 400 answers held out, a reward of +1 for a win minus 0.05 per guess, one measurement
+harness, the baseline policies, and three algorithms (REINFORCE, DQN, PPO) trained in PyTorch.
 
 On the 400 held-out secrets, measured by the same harness:
 
@@ -93,21 +110,12 @@ history, but the best next guess depends on the set of still-consistent candidat
 the observation does not contain — so a learned policy can only memorise the training
 distribution's average.
 
-**Play it:**
-
-```bash
-# you type the first guess, the trained agent plays the rest
-PYTHONPATH=src .venv/bin/python -m attempt2.play
-
-# the agent proposes each word, you give back the colours
-PYTHONPATH=src .venv/bin/python -m attempt2.play --advise
-
-# evaluate the agent against the baselines on the 400 held-out secrets
-PYTHONPATH=src .venv/bin/python -m attempt2.play --auto --games 400
-```
+### Attempts 3 and 4 — planned
 
 **Attempt 3 (`src/attempt3/attempt3.md`) is the information-theoretic attempt**: compute
-the strategy instead of learning it, with the full mathematics and a four-phase build plan.
+the strategy instead of learning it. It carries the mathematics (the pattern distribution,
+the mutual information a guess carries, the concave expected-guesses objective), every
+measurement from Attempt 2 that bears on it, and a four-phase build plan.
 
 **Attempt 4 (`plan.md` §10) is the from-scratch math attempt** — the Module-5 one: a binary
 candidate-consistency logistic regression written in NumPy, with a hand-derived gradient
@@ -116,11 +124,7 @@ descent. **NumPy only: no scikit-learn, no PyTorch.** It was originally Attempt 
 not changed in any way — only renumbered and moved from `src/attempt3/` to `src/attempt4/`,
 because Attempt 2 measured that the opening-word decision is better computed than learned.
 
-The `RL stack is pinned in requirements.txt`, and `feedbackTable.py` precomputes every
-answer/answer feedback pair once (~5 MB, built lazily) so RL steps are array lookups instead
-of Python calls.
-
-![Consistency skill vs rounds](src/attempt1/accuracy.png)
+---
 
 ## Repository layout
 
@@ -135,34 +139,34 @@ src/
 │   ├── features.py       # legacy encode, encodeRounds, encodeLetterState
 │   ├── dataset.py        # generate, generateVariable, generateClassComplete, evidence helpers
 │   └── core.md           # module-by-module core reference
-└── attempt1/
-    ├── features.py       # 250 candidate-relative features (no label leakage)
-    ├── common.py         # data rows, model registry, metrics, artifact persistence
-    ├── trainCompare.py   # baselines, training, tables, plot, analysis
-    ├── play.py           # interactive / --auto solver
-    └── attempt1.md       # full Attempt-1 write-up
-└── attempt2/
-    ├── config.py         # every Attempt-2 constant (seed, split, reward, observation)
-    ├── splits.py         # train / validation / held-out secrets, with a no-leakage assertion
-    ├── observation.py    # evidence -> one fixed-width vector
-    ├── actionMask.py     # which of the 2,315 answers are still legal to guess
-    ├── wordleEnv.py      # the Gymnasium environment
-    ├── eval.py           # the one measurement harness every policy is scored with
-    ├── baselines.py      # the policies the learned agent has to beat
-    ├── smoke.py          # end-to-end smoke test
-    ├── policies.py       # the networks, and masked action selection
-    ├── rollout.py        # the episode loop all three algorithms share
-    ├── replayBuffer.py   # the replay buffer DQN learns from
-    ├── reinforce.py      # REINFORCE with a value baseline
-    ├── dqn.py            # masked DQN with a target network
-    ├── ppo.py            # clipped-surrogate PPO
-    ├── train.py          # the training CLI
-    ├── openerSearch.py   # exhaustive search for the best opening word
-    ├── experiment.py     # the final table and the figures
-    ├── play.py          # the play modes: interactive, --advise, --auto
-    └── attempt2.md       # what Attempt 2 is doing, and why
-src/attempt3/
-└── attempt3.md           # the information-theoretic attempt: the math and the plan
+├── attempt1/
+│   ├── features.py       # 250 candidate-relative features (no label leakage)
+│   ├── common.py         # data rows, model registry, metrics, artifact persistence
+│   ├── trainCompare.py   # baselines, training, tables, plot, analysis
+│   ├── play.py           # interactive / --advise / --auto solver
+│   └── attempt1.md       # full Attempt-1 write-up
+├── attempt2/
+│   ├── config.py         # every Attempt-2 constant (seed, split, reward, observation)
+│   ├── splits.py         # train / validation / held-out secrets, with a no-leakage assertion
+│   ├── observation.py    # evidence -> one fixed-width vector
+│   ├── actionMask.py     # which of the 2,315 answers are still legal to guess
+│   ├── wordleEnv.py      # the Gymnasium environment
+│   ├── eval.py           # the one measurement harness every policy is scored with
+│   ├── baselines.py      # the policies the learned agent has to beat
+│   ├── smoke.py          # end-to-end smoke test
+│   ├── policies.py       # the networks, and masked action selection
+│   ├── rollout.py        # the episode loop all three algorithms share
+│   ├── replayBuffer.py   # the replay buffer DQN learns from
+│   ├── reinforce.py      # REINFORCE with a value baseline
+│   ├── dqn.py            # masked DQN with a target network
+│   ├── ppo.py            # clipped-surrogate PPO
+│   ├── train.py          # the training CLI
+│   ├── openerSearch.py   # exhaustive search for the best opening word
+│   ├── experiment.py     # the final table and the figures
+│   ├── play.py           # the play modes: interactive, --advise, --auto
+│   └── attempt2.md       # full Attempt-2 write-up
+└── attempt3/
+    └── attempt3.md       # the information-theoretic attempt: the math and the plan
 tests/                    # 316 tests
 ```
 
@@ -186,43 +190,64 @@ Run the tests:
 .venv/bin/python -m pytest tests/ -q
 ```
 
-Run the full Attempt-1 experiment (step-3 encoding checks, baselines, four models, comparison
-tables, plot, state-level analysis):
+### Attempt 1
 
 ```bash
+# the full experiment: step-3 encoding checks, baselines, four models, tables, plot
 PYTHONPATH=src .venv/bin/python src/attempt1/trainCompare.py
-```
 
-Play interactively — you type the first guess, the model plays the rest:
-
-```bash
+# play interactively - you type guess 1, the model plays the rest
 PYTHONPATH=src .venv/bin/python src/attempt1/play.py
-```
 
-Ask for the next best word while you play — you enter each guess and its colours:
-
-```bash
+# ask for the next best word while you play - you enter each guess and its colours
 PYTHONPATH=src .venv/bin/python src/attempt1/play.py --advise
-```
 
-Colours can be entered as `GYXXG`, `2 1 0 0 2`, or `green yellow grey grey green`. The advisor
-validates each move against the evidence and prints the model's next recommended word.
-
-Evaluate the solver and baselines over 400 games:
-
-```bash
+# evaluate the solver and baselines over 400 games
 PYTHONPATH=src .venv/bin/python src/attempt1/play.py --auto --games 400
-```
 
-Test the model without the rule mask (the honest check of what it learned):
-
-```bash
+# test the model without the rule mask (the honest check of what it learned)
 PYTHONPATH=src .venv/bin/python src/attempt1/play.py --auto --model-only
 ```
 
+Colours can be entered as `GYXXG`, `2 1 0 0 2`, or `green yellow grey grey green`.
+
+### Attempt 2
+
+```bash
+# play: you type the first guess, the trained agent plays the rest
+PYTHONPATH=src .venv/bin/python -m attempt2.play
+
+# advise: the agent proposes each word, you give back the colours
+PYTHONPATH=src .venv/bin/python -m attempt2.play --advise
+
+# evaluate the agent against the baselines on the 400 held-out secrets
+PYTHONPATH=src .venv/bin/python -m attempt2.play --auto --games 400
+
+# a different agent: --algo reinforce | dqn | ppo
+PYTHONPATH=src .venv/bin/python -m attempt2.play --algo ppo
+
+# the baseline table on the held-out secrets
+PYTHONPATH=src .venv/bin/python -m attempt2.baselines
+
+# the whole experiment: every policy, plus the three figures
+PYTHONPATH=src .venv/bin/python -m attempt2.experiment
+
+# train an agent (about 27 minutes for 250k episodes)
+PYTHONPATH=src .venv/bin/python -m attempt2.train --algo reinforce --episodes 250000 \
+    --learning-rate 0.01 --entropy-start 0.2 --entropy-end 0.01
+
+# search all 2,315 openers for the best one (about 1.2 million games)
+PYTHONPATH=src .venv/bin/python -m attempt2.openerSearch --games 400 --refine-games 4000
+```
+
+The play modes need a trained agent in `src/attempt2/artifacts/`; if it is missing they say so
+and print the command to train one.
+
 `trainCompare.py` writes `model.joblib`, `results.json`, `accuracy.png` and, when the solver is
-run, `playResults.json`. The trained model and result files are generated artifacts and are not
-tracked.
+run, `playResults.json`. `attempt2.train` writes `<algo>-model.pt`, `<algo>-curve.csv` and
+`<algo>-results.json`, and `attempt2.experiment` writes `comparison.png`,
+`learning-curves.png`, `first-guess.png` and `experiment-results.json`. All of them are
+generated artifacts and are not tracked.
 
 ## Core guarantees
 
@@ -232,6 +257,10 @@ tracked.
 - `feedbackTable()` is a pure accelerator: the table is cross-checked against `feedback()`, and
   `candidatesMatchingFast()` returns exactly what `candidatesMatching()` returns. The original
   pure-Python functions are unchanged.
+- An illegal action is impossible, not unlikely: the mask is applied to the logits before the
+  softmax, so it has probability zero and no gradient.
+- The held-out secrets are held out in code, not in comments: the environment refuses a secret
+  from the wrong pool, and the evaluation harness refuses to score a policy on the wrong set.
 - All imports are package-absolute; run scripts with `PYTHONPATH=src`.
 - Naming is camelCase throughout.
 - The legacy colour-only `encode` is untouched; the letter-aware `encodeRounds` /

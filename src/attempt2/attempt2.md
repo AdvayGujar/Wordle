@@ -1,10 +1,9 @@
 # Attempt 2 — reinforcement learning (the agent learns a strategy on its own)
 
-**Status:** 🟡 **Phases A and B complete** (environment, split, observation, action mask,
-evaluation harness, baselines). Phases C–D (the learning algorithms, and the experiment +
-results) are planned but not built. This file records what Attempt 2 is trying to do, what
-has been built so far, and every design choice behind it. It will be extended with the
-agent's results as the phases land.
+**Status:** ✅ **complete** (Phases A–D: environment, split, observation, action mask,
+evaluation harness, baselines, the three algorithms, the exhaustive opener search, the
+experiment and the play modes). This file records what Attempt 2 is trying to do, what was
+built, every design choice behind it, and what was measured.
 
 **Files (built)**
 
@@ -28,13 +27,12 @@ agent's results as the phases land.
 | `openerSearch.py` | The exhaustive search for the best opening word |
 | `experiment.py` | Evaluates every policy on the held-out secrets and writes the figures |
 | `play.py` | The play modes: interactive, `--advise` and `--auto` |
+| `attempt2.md` | This file |
 
 **Files (planned)**
 
-| Piece | Purpose |
-|---|---|
-| `experiment.py` | Runs everything and produces the comparison tables and plots |
-| `attempt2.md` | This file |
+None — every module of Attempt 2 is built. The next attempt is Attempt 3 (information
+theory), planned in `src/attempt3/attempt3.md`.
 
 ---
 
@@ -55,7 +53,7 @@ allowed to improve).
                         └──────────────┬─────────────────┘
                                        v
                             ┌─────────────────────┐
-                            │  policy network     │   Phase C (not built yet)
+                            │  policy network     │   reinforce.py / dqn.py / ppo.py
                             │  obs -> 2315 logits │   masks the logits to -inf
                             └──────────┬──────────┘   on every illegal action
                                        v
@@ -890,7 +888,7 @@ figures and `results.json`. It never trains: the agents are loaded from `artifac
 the experiment can be re-run and re-plotted without repeating 27 minutes of training per
 algorithm.
 
-### 12.1 Every policy on the same 400 held-out secrets
+### 13.1 Every policy on the same 400 held-out secrets
 
 | Policy | Win rate | Avg guesses (wins) | Avg guesses (all) | Opens with |
 |---|---|---|---|---|
@@ -906,7 +904,7 @@ algorithm.
 (4.07) and the Attempt-1 solver (3.90), and none of them beats one hand-picked opening
 word (3.77).
 
-### 12.2 The finding that matters most: the generalisation gap
+### 13.2 The finding that matters most: the generalisation gap
 
 The learning curves say PPO improved a lot — its training average fell from 4.05 to 3.59.
 Its held-out score says otherwise. The same policy, scored on three different sets of
@@ -941,7 +939,7 @@ gap, and it transfers.
 gap: the candidate set is recoverable exactly, and the choice does not have to be
 memorised. See `src/attempt3/attempt3.md`.
 
-### 12.3 What each agent learned
+### 13.3 What each agent learned
 
 - **REINFORCE** learned a good *strategy* and a mediocre opener. Its later play beats
   random legal guessing (3.68 against 3.77 with the same opener), but its opener `actor`
@@ -953,7 +951,7 @@ memorised. See `src/attempt3/attempt3.md`.
   generalise over from a 60-dimensional state, and it is the only policy below the random
   baseline on every set.
 
-### 12.4 The figures
+### 13.4 The figures
 
 - `comparison.png` — every policy's average guesses on the held-out secrets.
 - `learning-curves.png` — each algorithm's training curve **with its validation points on
@@ -990,7 +988,7 @@ memorised. See `src/attempt3/attempt3.md`.
   later turns were confidently wrong. A policy that is still learning should be judged
   against the rules, not against its own confidence.
 - **The observation does not determine the candidate set.** This is the deepest limitation
-  and it is measured (§12.2): the policy sees the feedback history, but the best next guess
+  and it is measured (§13.2): the policy sees the feedback history, but the best next guess
   depends on which words are still consistent — information the observation does not
   contain. A learned policy can only learn the training distribution's average, and a
   confident policy over that average transfers badly (PPO: 3.59 on the training secrets,
