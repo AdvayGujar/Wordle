@@ -1,11 +1,12 @@
 # Attempt 3 — information theory as the strategy
 
-**Status:** 🟩 **Phase B complete (A0-B4).** Everything through the three ablations is built
-and measured, with 169 tests. Gate A passed (the criterion reproduces every number the plan
-quotes); Gate B passed (B1 entropy 3.46, B2 remaining 3.51, B3 fixed pair 3.58 guesses on the
-200 validation secrets, §3.8). Phase C - the expected-score policy and the two-ply lookahead -
-is next, and its bar is 3.46. This file records the mathematics, the measurements that decide
-the design, the criterion the implementation uses, and the remaining build plan.
+**Status:** 🟩 **Phase C complete (A0-C3).** The full strategy is built and measured, with
+194 tests. Gate A passed (every quoted number reproduces), Gate B passed (B1 3.46, B2 3.51,
+B3 3.58, §3.8), Gate C passed with a caveat: C1 measures **3.44** against B1's 3.46 and the
+no-probe variant's 3.55 (§3.9), but the entropy margin is inside the noise - probes, worth
+0.135, carry the result. Phase D, the held-out experiment and the write-up, is next. This
+file records the mathematics, the measurements that decide the design, the criterion the
+implementation uses, and the remaining build plan.
 
 **It replaces the original Attempt 3** (from-scratch binary logistic regression on the
 Module-5 math), which is deferred to Attempt 4. The reasoning: Attempt 2 measured exactly
@@ -553,6 +554,45 @@ the first turn learned, and it gives up the chance of winning on turn two.
 was measured on the held-out 400, so its numbers are **not** comparable with this table. C1
 has to beat the validation number above, not the prototype's ordering.
 
+### 3.9 Gate C — the expected-score policy and the lookahead (200 validation secrets)
+
+`gateC.py` re-runs B1 as a reference in the same process, then C1 with probes, C1 without,
+and C2. One process, one harness, the same 200 validation secrets.
+
+| Policy | Win rate | Avg guesses | Wins by turn | Off-candidate probes |
+|---|---|---|---|---|
+| B1 entropy (reference) | 100% | 3.46 | 1:1, 2:5, 3:103, 4:84, 5:7 | 191 |
+| **C1 expected score** | 100% | **3.44** | 1:1, 2:5, 3:109, 4:76, 5:9 | 166 |
+| C1 expected score, no probes | 99.0% | 3.55 | 1:1, 2:11, 3:95, 4:68, 5:16, 6:7 | 0 |
+| C2 two-ply | 100% | 3.46 | 2:11, 3:97, 4:81, 5:11 | 107 |
+
+Paired per secret, so the interval is on the *difference* rather than on two averages:
+
+| C1 versus | Difference (C1 − other) | 95% interval | C1 better / worse / same |
+|---|---|---|---|
+| B1 entropy | **−0.020** | ±0.034 | 8 / 4 / 188 |
+| C1, no probes | **−0.135** | ±0.106 | 42 / 29 / 129 |
+| C2 two-ply | −0.025 | ±0.121 | 52 / 53 / 95 |
+
+**Gate C passes as written, and that is all it does.** C1 is 0.02 guesses ahead of B1 and the
+interval includes zero; on 188 of the 200 secrets the two policies need exactly the same
+number of guesses. That is not a separation, and the write-up must not claim one.
+
+**What the criterion buys is probes, not the win-chance term.** Removing probes costs 0.135
+guesses (interval 0.03 to 0.24) and one point of win rate: the no-probe row loses two games
+and reaches a sixth guess seven times, while C1 loses none. The information in an
+off-candidate word is worth more than the chance to win now that `p(g)` adds.
+
+**C2 does not improve on C1.** 3.46 against 3.44, +0.025 with an interval through zero. The
+two-ply value picked `least` over `raise` and probes less (107 against 166), and neither
+helped at this sample size. It stays as a measured local refinement, not as an improvement.
+
+**§3.7's prototype did not reproduce.** It promised 0.19 guesses for the win-chance term and
+0.08 for probes, on the held-out 400. On the validation slice the win-chance term is 0.02
+(inside the noise) and probes are worth 0.135. The probe effect keeps its sign; its size does
+not, and the ranking of the two effects reverses. §3.7 stays as the pre-coding record, and
+Phase D must quote the numbers above rather than the prototype's.
+
 ---
 
 ## 4. The build plan
@@ -614,6 +654,7 @@ module changes what B1/B2/B3 measure.
 |---|---|---|---|
 | C1 | `adaptivePicker` | `src/attempt3/adaptivePicker.py` | The expected-score policy (§2.7), with the deterministic tie-break and a policy adapter for `attempt2.eval`. This is the strategy the attempt is judged on. |
 | C2 | `lookahead` | `src/attempt3/lookahead.py` | Two-ply: for a chosen first word, evaluate each of its branches with the best second word, using the same expected-score criterion. A local refinement, not a full tree solve. |
+| C3 | `gateC` | `src/attempt3/gateC.py` | **Added during Phase C.** The Gate C harness: re-runs B1, then C1 with and without probes and C2, on the validation slice, and reports the paired per-secret difference that decides whether a 0.02-guess gap means anything. |
 
 ### 4.5 Phase D — evaluation and write-up
 
@@ -634,13 +675,15 @@ module changes what B1/B2/B3 measure.
 | `tests/test_attempt3RemainingPicker.py` | Opens with `raise`; minimises expected remaining; guesses a singleton; never repeats; deterministic. |
 | `tests/test_attempt3PairPicker.py` | Joint entropy is symmetric but conditional entropy is not; pair information ≤ sum of individual entropies; the pair is two distinct words, higher entropy first; the pair is played on turns 1-2 and B2 takes over on turn 3; singletons and repeats. |
 | `tests/test_attempt3Adaptive.py` | Opener is `raise`; singleton picks the answer; a candidate with equal information beats a probe; never repeats; the policy adapter returns valid answer indices; the chosen guess is not required to be consistent. |
-| `tests/test_attempt3Lookahead.py` | On a tiny feasible set, the two-ply score matches brute force. |
+| `tests/test_attempt3Lookahead.py` | On a tiny feasible set, the two-ply score matches a brute force built on `feedback()`; the green branch costs nothing; the opener is `least`, not the greedy `raise`; singleton, repeats, determinism. |
+| `tests/test_attempt3GateC.py` | The paired summary is `right - left`; a loss costs the full budget; secrets are matched by name, not position. |
 | `tests/test_attempt3Experiment.py` | Table formatting and result shapes; no 400-game run inside a test. |
 
 ### 4.7 Run commands (once built)
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m attempt3.gateB            # the Phase-B ablations (Gate B)
+PYTHONPATH=src .venv/bin/python -m attempt3.gateC            # C1, its no-probe variant, C2 (Gate C)
 PYTHONPATH=src .venv/bin/python -m attempt3.experiment
 PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a smoke check
 .venv/bin/python -m pytest tests/ -q
@@ -652,8 +695,9 @@ PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a s
   examples (§2.7) and every opener number (§2.2, §2.3, §3.7).
 - **Gate B** — ✅ B1/B2/B3 measured on the validation slice before C1 was written: 3.46,
   3.51 and 3.58 guesses (§3.8). The bar for C1 is **3.46**.
-- **Gate C** — C1 beats pure entropy (3.46) and the no-probe variant on the validation
-  slice. Not started.
+- **Gate C** — ✅ C1 measures 3.44 against B1's 3.46 and the no-probe variant's 3.55 (§3.9).
+  The interval over entropy includes zero, so the honest verdict is "passes, margin not
+  established"; the probe margin (0.135) is established.
 - **Gate D** — every headline number is reproducible from `python -m attempt3.experiment`
   with the seeds in `config.py`, and the held-out 400 are read once.
 

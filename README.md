@@ -10,7 +10,7 @@ different means. Two questions drive it:
 |---|---|---|
 | 1 | supervised candidate-consistency scoring | ✅ [`attempt1.md`](src/attempt1/attempt1.md) |
 | 2 | reinforcement learning — the agent learns a strategy | ✅ [`attempt2.md`](src/attempt2/attempt2.md) |
-| 3 | information theory — *compute* the strategy | 🚧 Phase B complete (A0–B4) [`attempt3.md`](src/attempt3/attempt3.md) |
+| 3 | information theory — *compute* the strategy | 🚧 Phase C complete (A0–C3) [`attempt3.md`](src/attempt3/attempt3.md) |
 | 4 | the Module-5 math, written from scratch in NumPy | 📋 `plan.md` §10 |
 
 ## Results
@@ -65,18 +65,21 @@ only memorise the training distribution's average. That is exactly the gap Attem
 ### Attempt 3 — information theory (in progress)
 
 **Attempt 3** (`src/attempt3/attempt3.md`) computes the strategy instead of learning it.
-Phase A and Gate B are complete (169 tests). The criterion reproduces every number the plan
-quotes — it opens with `raise` (5.878 bits, 61 expected remaining, 132 non-empty branches) at
-an expected score of 3.6646 — and the three Phase-B ablations were measured on the 200
-validation secrets:
+The strategy is built (194 tests) and every gate has been measured on the 200 validation
+secrets, with the held-out 400 still unread:
 
-| Pickers, on validation | Avg guesses | Win rate |
+| Policy, on validation | Avg guesses | Win rate |
 |---|---|---|
-| B1 entropy | **3.46** | 100% |
+| **C1 expected score** | **3.44** | 100% |
+| B1 entropy | 3.46 | 100% |
+| C2 two-ply | 3.46 | 100% |
 | B2 expected remaining | 3.51 | 100% |
+| C1 without probes | 3.55 | 99.0% |
 | B3 fixed pair (`trice`→`salon`), then B2 | 3.58 | 100% |
 
-The expected-score policy (C1) and the two-ply lookahead (C2) follow; C1's bar is 3.46.
+C1 leads, but its 0.02 margin over entropy is inside the noise; removing probes costs 0.135
+guesses, so probes are what the criterion actually buys. Phase D — the held-out experiment and
+the write-up — is next.
 
 **Attempt 4** (`plan.md` §10): the Module-5 exercise — binary candidate-consistency logistic
 regression in NumPy, hand-derived gradient `Xᵀ(p − y)/N`, finite-difference and
@@ -90,8 +93,8 @@ src/
 ├── wordle/     # shared core: feedback, feedbackTable, vocabulary, game, features, dataset
 ├── attempt1/   # supervised candidate-consistency, solver, attempt1.md
 ├── attempt2/   # reinforcement learning: env, algorithms, harness, play modes, attempt2.md
-└── attempt3/   # information theory: patterns, objective, pickers, gateB (+ attempt3.md)
-tests/          # 485 tests
+└── attempt3/   # information theory: patterns, objective, pickers, lookahead, gateC (+ attempt3.md)
+tests/          # 510 tests
 ```
 
 ## Usage
