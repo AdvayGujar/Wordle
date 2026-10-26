@@ -11,3 +11,6 @@ src/attempt1/playResults.json
 
 # Generated Attempt 2 artifacts (reproducible via attempt2/train.py)
 src/attempt2/artifacts/
+
+# Generated Attempt 3 artifacts (reproducible via attempt3/gateB.py)
+src/attempt3/artifacts/
