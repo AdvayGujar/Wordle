@@ -1,12 +1,11 @@
 # Attempt 3 — information theory as the strategy
 
-**Status:** 🟩 **Phase A complete (A0-A3).** `config.py`, `patterns.py`, `objective.py` and
-`letterStats.py` are done, with 129 tests. Gate A passed: the criterion reproduces the two
-worked examples of §2.7 and every opener number quoted in §2.2, §2.3 and §3.7, and it picks
-`raise` at the empty history. `letterStats.py` reproduces the §2.6 table and the 0.923
-correlation. Phase B (the pickers) is next. This file records the mathematics, the
-measurements that decide the design, the criterion the implementation uses, and the
-remaining build plan.
+**Status:** 🟩 **Phase B complete (A0-B4).** Everything through the three ablations is built
+and measured, with 169 tests. Gate A passed (the criterion reproduces every number the plan
+quotes); Gate B passed (B1 entropy 3.46, B2 remaining 3.51, B3 fixed pair 3.58 guesses on the
+200 validation secrets, §3.8). Phase C - the expected-score policy and the two-ply lookahead -
+is next, and its bar is 3.46. This file records the mathematics, the measurements that decide
+the design, the criterion the implementation uses, and the remaining build plan.
 
 **It replaces the original Attempt 3** (from-scratch binary logistic regression on the
 Module-5 math), which is deferred to Attempt 4. The reasoning: Attempt 2 measured exactly
@@ -522,6 +521,38 @@ What the table says:
 - The best Attempt-2 bar is cleared by **0.22 guesses** before the lookahead module is even
   added.
 
+### 3.8 Gate B — the Phase-B ablations (200 validation secrets)
+
+`gateB.py` wires each picker to `attempt2.eval.evaluateValidation`, so all three are played by
+the same harness as Attempts 1 and 2. The 200 validation secrets are the training half of the
+split, not the held-out 400, which stay unread until Phase D (§4.1.6). The `off-candidate`
+column counts guesses that are inconsistent with the evidence - deliberate probes, not
+errors (§4.1.5).
+
+| Policy | Win rate | Avg guesses (wins) | Wins by turn | Off-candidate probes |
+|---|---|---|---|---|
+| B1 entropy | 100% | **3.46** | 1:1, 2:5, 3:103, 4:84, 5:7 | 191 |
+| B2 remaining | 100% | 3.51 | 1:1, 2:6, 3:92, 4:92, 5:9 | 196 |
+| B3 fixed pair, then B2 | 100% | 3.58 | 2:4, 3:84, 4:105, 5:7 | 222 |
+
+All three open with `raise`, as they must: at the empty history the highest-entropy answer is
+also the one with the smallest expected remainder (§3.2).
+
+**B1 is 0.05 guesses ahead of B2, and that is inside the noise.** With 200 games and a
+per-game spread near 0.7, the standard error of an average is about 0.05 - so the two
+criteria are not separated by this measurement, only by the fact that their rankings diverge
+on later turns. Any claim that one beats the other has to come from the larger Phase-D run.
+
+**B3 is the worst policy, which is what §3.4 predicted.** Its pair is `trice` then `salon`,
+with a joint 9.584 bits - against a theoretical maximum of 15.85 for two 243-way splits and a
+sum-of-singles bound of 11.76 for its own two words. The second word adds 3.950 bits given
+the first. It still loses to B2 by 0.07 guesses, because a fixed second word cannot use what
+the first turn learned, and it gives up the chance of winning on turn two.
+
+**What Gate C has to beat: 3.46.** §3.7's prototype (expected score 3.4625, entropy 3.655)
+was measured on the held-out 400, so its numbers are **not** comparable with this table. C1
+has to beat the validation number above, not the prototype's ordering.
+
 ---
 
 ## 4. The build plan
@@ -567,9 +598,15 @@ one vectorised operation over the feedback table, not a Python loop per candidat
 
 | # | Module | File | Purpose |
 |---|---|---|---|
+| B0 | `pickers` | `src/attempt3/pickers.py` | **Added during Phase B.** The state every picker needs — the feasible set and the unplayed pool, read from the history through `attempt2.actionMask.maskFor` — plus the §2.7 deterministic tie-break, written once so three ablations cannot break a tie three ways. |
 | B1 | `entropyPicker` | `src/attempt3/entropyPicker.py` | Greedy per-turn maximiser of the pattern entropy — the pure-information ablation, and the deferred `entropy.py` of the original plan (§6.6). Must include the singleton endgame rule. |
 | B2 | `remainingPicker` | `src/attempt3/remainingPicker.py` | Greedy per-turn minimiser of \(\mathbb{E}[|C'|]\). |
 | B3 | `pairPicker` | `src/attempt3/pairPicker.py` | A fixed pair of words chosen jointly to maximise the information of the pair — the "two words" idea of §3.4. |
+| B4 | `gateB` | `src/attempt3/gateB.py` | **Added during Phase B.** The Gate B measurement harness: runs B1/B2/B3 through `attempt2.eval.evaluateValidation` on the 200 validation secrets and writes `artifacts/gateB-results.json`. Phase D's `experiment.py` supersedes it for the final table. |
+
+B0 exists because the plan's three pickers all needed the same history→state conversion, and
+B4 because §4.8 requires that measurement before C1 is tuned but names no harness. Neither
+module changes what B1/B2/B3 measure.
 
 ### 4.4 Phase C — the adaptive strategy
 
@@ -591,10 +628,11 @@ one vectorised operation over the feedback table, not a Python loop per candidat
 |---|---|
 | `tests/test_attempt3Patterns.py` | Histogram equals the slow `feedback()` path; entropy of a uniform \(k\)-way split is \(\log_2 k\); \(\mathbb{E}[|C'|]\) matches a hand count; Jensen gap \(\ge 0\); empty set; purity and no input mutation. |
 | `tests/test_attempt3Objective.py` | \(f(0)=1\), \(f\) increasing, \(f(11.5)\approx 3.5\); the two worked examples of §2.7; the whole score agrees with a slow `feedback()`-per-pair reference, including repeated letters; candidate beats an equally informative probe; singleton set picks the answer; \(c(m)\) matches brute force; the green branch costs zero further guesses. |
-| `tests/test_attempt3LetterStats.py` | Frequencies, distinct-letter buckets, the correlation. |
-| `tests/test_attempt3EntropyPicker.py` | Picks the maximum-entropy word; guesses a singleton; never repeats; deterministic. |
-| `tests/test_attempt3RemainingPicker.py` | Minimises expected remaining; never repeats. |
-| `tests/test_attempt3PairPicker.py` | Joint entropy is symmetric but conditional entropy is not; pair information ≤ sum of individual entropies; no repeats. |
+| `tests/test_attempt3LetterStats.py` | Frequencies, distinct-letter buckets, the correlation; the occurrence definition (0.923, not 0.9365); malformed words and frequency arrays; the cached entropy array cannot be corrupted. |
+| `tests/test_attempt3Pickers.py` | **Added with B0.** The feasible set equals the slow `candidatesMatching()` result; the pool excludes played words and includes probes; the tie-break order is score, candidate, expected remaining, index; malformed score arrays fail loudly. |
+| `tests/test_attempt3EntropyPicker.py` | Opens with `raise`; picks the maximum-entropy word; plays a probe after `raise` with one yellow; guesses a singleton; never repeats; deterministic. |
+| `tests/test_attempt3RemainingPicker.py` | Opens with `raise`; minimises expected remaining; guesses a singleton; never repeats; deterministic. |
+| `tests/test_attempt3PairPicker.py` | Joint entropy is symmetric but conditional entropy is not; pair information ≤ sum of individual entropies; the pair is two distinct words, higher entropy first; the pair is played on turns 1-2 and B2 takes over on turn 3; singletons and repeats. |
 | `tests/test_attempt3Adaptive.py` | Opener is `raise`; singleton picks the answer; a candidate with equal information beats a probe; never repeats; the policy adapter returns valid answer indices; the chosen guess is not required to be consistent. |
 | `tests/test_attempt3Lookahead.py` | On a tiny feasible set, the two-ply score matches brute force. |
 | `tests/test_attempt3Experiment.py` | Table formatting and result shapes; no 400-game run inside a test. |
@@ -602,6 +640,7 @@ one vectorised operation over the feedback table, not a Python loop per candidat
 ### 4.7 Run commands (once built)
 
 ```bash
+PYTHONPATH=src .venv/bin/python -m attempt3.gateB            # the Phase-B ablations (Gate B)
 PYTHONPATH=src .venv/bin/python -m attempt3.experiment
 PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a smoke check
 .venv/bin/python -m pytest tests/ -q
@@ -609,11 +648,12 @@ PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a s
 
 ### 4.8 Phase gates
 
-- **Gate A** — A1/A2 tests pass and the expected-score formula reproduces the worked
-  examples before any picker is written.
-- **Gate B** — B1/B2/B3 are measured on the validation slice; their numbers are recorded
-  before C1 is tuned.
-- **Gate C** — C1 beats pure entropy and the no-probe variant on the validation slice.
+- **Gate A** — ✅ A0-A3 tests pass and the expected-score formula reproduces the worked
+  examples (§2.7) and every opener number (§2.2, §2.3, §3.7).
+- **Gate B** — ✅ B1/B2/B3 measured on the validation slice before C1 was written: 3.46,
+  3.51 and 3.58 guesses (§3.8). The bar for C1 is **3.46**.
+- **Gate C** — C1 beats pure entropy (3.46) and the no-probe variant on the validation
+  slice. Not started.
 - **Gate D** — every headline number is reproducible from `python -m attempt3.experiment`
   with the seeds in `config.py`, and the held-out 400 are read once.
 
