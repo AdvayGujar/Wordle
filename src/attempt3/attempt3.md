@@ -1,12 +1,12 @@
 # Attempt 3 — information theory as the strategy
 
-**Status:** 🟩 **Phase C complete (A0-C3).** The full strategy is built and measured, with
-194 tests. Gate A passed (every quoted number reproduces), Gate B passed (B1 3.46, B2 3.51,
-B3 3.58, §3.8), Gate C passed with a caveat: C1 measures **3.44** against B1's 3.46 and the
-no-probe variant's 3.55 (§3.9), but the entropy margin is inside the noise - probes, worth
-0.135, carry the result. Phase D, the held-out experiment and the write-up, is next. This
-file records the mathematics, the measurements that decide the design, the criterion the
-implementation uses, and the remaining build plan.
+**Status:** ✅ **complete.** All four phases are built and measured, with 202 tests. The
+result: **3.46 average guesses and 100% wins on the 400 held-out secrets**, against 3.77 for
+Attempt 2's best combination and 3.85 for its best learned agent (§3.10). Two findings the
+plan did not predict: the expected-score term ties plain entropy (3.46 against 3.46), and the
+two-ply lookahead does not help (3.48). Probes are what pays. This file records the
+mathematics, the measurements that decide the design, the criterion the implementation uses,
+and what the result actually was.
 
 **It replaces the original Attempt 3** (from-scratch binary logistic regression on the
 Module-5 math), which is deferred to Attempt 4. The reasoning: Attempt 2 measured exactly
@@ -497,6 +497,11 @@ and top-1 by the game objective — which `slate` already is.
 
 ### 3.7 Pre-coding measurements (prototypes, not committed code)
 
+**Superseded by §3.10.** The committed experiment did not reproduce the gap this table
+promises: the win-chance term buys nothing measurable, and probes do most of the work. The
+table stays as the pre-coding record - the decisions it drove are in §4.1 - and §3.10 is what
+the figures should be quoted from.
+
 Before writing any module, the criterion was prototyped and scored on Attempt 2's exact
 400 held-out secrets. These numbers decide the design; the committed `experiment.py` will
 reproduce them.
@@ -592,6 +597,68 @@ helped at this sample size. It stays as a measured local refinement, not as an i
 (inside the noise) and probes are worth 0.135. The probe effect keeps its sign; its size does
 not, and the ranking of the two effects reverses. §3.7 stays as the pre-coding record, and
 Phase D must quote the numbers above rather than the prototype's.
+
+### 3.10 The result — every policy on the 400 held-out secrets
+
+`experiment.py` evaluates all thirteen policies through `attempt2.eval.evaluate`, on the 400
+held-out secrets. The policies were fixed before this run - Gate C chose between them on the
+validation slice (§3.9) - and the held-out set has not been used for any decision since.
+
+| Policy | Win rate | Avg guesses (wins) | Avg guesses (all) | Wins by turn | Off-candidate probes |
+|---|---|---|---|---|---|
+| B1 entropy | 100% | **3.46** | 3.46 | 2:12, 3:203, 4:176, 5:9 | 359 |
+| **C1 expected score** | 100% | **3.46** | 3.46 | 2:14, 3:202, 4:170, 5:13, 6:1 | 312 |
+| C2 two-ply | 100% | 3.48 | 3.48 | 2:14, 3:203, 4:164, 5:16, 6:3 | 182 |
+| B2 remaining | 100% | 3.48 | 3.48 | 2:12, 3:193, 4:185, 5:10 | 378 |
+| C1 no probes | 99.2% | 3.53 | 3.54 | 2:22, 3:186, 4:151, 5:34, 6:4 | 0 |
+| B3 pair, then B2 | 100% | 3.56 | 3.56 | 2:7, 3:177, 4:202, 5:14 | 438 |
+| `slate` + random (A2) | 99.0% | 3.77 | 3.79 | 2:27, 3:134, 4:154, 5:65, 6:16 | 0 |
+| `crane` + random (A2) | 99.0% | 3.80 | 3.83 | 1:1, 2:22, 3:137, 4:145, 5:76, 6:15 | 0 |
+| REINFORCE (A2) | 97.8% | 3.85 | 3.90 | 1:1, 2:22, 3:131, 4:142, 5:72, 6:23 | 0 |
+| Attempt-1 solver | 97.8% | 3.90 | 3.95 | 1:1, 2:24, 3:111, 4:154, 5:79, 6:22 | 0 |
+| PPO (A2) | 98.8% | 4.01 | 4.04 | 2:9, 3:89, 4:201, 5:80, 6:16 | 0 |
+| masked random (A2) | 98.5% | 4.07 | 4.10 | 2:16, 3:100, 4:148, 5:101, 6:29 | 0 |
+| DQN (A2) | 95.8% | 4.34 | 4.41 | 2:8, 3:64, 4:142, 5:127, 6:42 | 0 |
+
+![Every policy on the same 400 held-out secrets](comparison.png)
+
+Paired per secret (difference = other − C1; positive means C1 needed fewer guesses):
+
+| C1 versus | Difference | 95% interval | C1 better / worse / same |
+|---|---|---|---|
+| B1 entropy | **−0.007** | ±0.025 | 9 / 13 / 378 |
+| `slate` + random (A2) | **+0.330** | ±0.107 | 162 / 91 / 147 |
+| C1 no probes | **+0.083** | ±0.061 | 68 / 44 / 288 |
+| C2 two-ply | +0.015 | ±0.080 | 104 / 98 / 198 |
+
+**The computed strategy clears every bar in §3.6.** 3.46 against 3.77 for the best Attempt-2
+combination, 3.85 for its best learned agent and 3.90 for the Attempt-1 solver. Against
+`slate` + random the paired interval is 0.22 to 0.44 guesses, so the improvement is not a
+sampling artefact.
+
+**Two things did not work, and they are the two the plan expected to work.**
+
+- **The win-chance term buys nothing.** C1 and B1 finish on the same 3.46; paired, −0.007
+  ±0.025, with 378 of the 400 games taking exactly the same number of guesses. §3.7 promised
+  0.19 guesses for this term; neither the validation slice (§3.9) nor the held-out set
+  supports it. The simplest policy in the attempt - greedy entropy, probes allowed - matches
+  the one the attempt was built around.
+- **The lookahead buys nothing.** C2 is 3.48, +0.015 ±0.080 against C1. It probes less (182
+  against 312) and wins on the same turns.
+
+**What does pay is probes.** Removing them costs 0.083 guesses (paired interval 0.02 to 0.14)
+and 0.8 points of win rate; the no-probe row is the only Attempt-3 policy that loses a game.
+The information in an off-candidate word is worth more than the chance to win now.
+
+**The pair ablation is the weakest Attempt-3 row and still beats every reference.** 3.56, 0.08
+behind B2, whose rule it hands over to after two turns. §3.4 was right: two fixed
+information-rich words do not identify the word, but the greedy machinery behind them does
+most of the work.
+
+**The shape of the table matters as much as the average.** Attempt 3's policies win on turn 3
+in 202-203 of 400 games; the references manage 89-154. They are not shaving a fraction of a
+guess off the same games - they finish most games a turn earlier, and almost never reach the
+sixth guess (`distribution.png`).
 
 ---
 
@@ -698,8 +765,11 @@ PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a s
 - **Gate C** — ✅ C1 measures 3.44 against B1's 3.46 and the no-probe variant's 3.55 (§3.9).
   The interval over entropy includes zero, so the honest verdict is "passes, margin not
   established"; the probe margin (0.135) is established.
-- **Gate D** — every headline number is reproducible from `python -m attempt3.experiment`
-  with the seeds in `config.py`, and the held-out 400 are read once.
+- **Gate D** — ✅ every headline number comes from one run of
+  `python -m attempt3.experiment`, which also writes both figures and
+  `artifacts/experiment-results.json`. The held-out 400 were read once, by policies that were
+  already fixed on the validation slice; the run was repeated once to add the C1-vs-B1 paired
+  interval, and every policy row was verified byte-identical.
 
 ---
 
@@ -725,9 +795,10 @@ PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a s
 - **The ceiling.** The opening-word decision is worth ~0.30 guesses and the whole opener
   spread is 0.86. Most of the remaining headroom is in the *later* turns, where the feasible
   sets are small and the entropy differences are small.
-- **Honest expectation.** The prototype already lands at 3.4625, inside the 3.4–3.6 range
-  the plan predicted and 0.22 better than the strongest Attempt-2 combination. The
-  remaining upside is the lookahead and the pair strategy, not a dramatic win.
+- **Outcome (§3.10).** The attempt lands at **3.46**, inside the 3.4–3.6 range the plan
+  predicted and 0.31 better than the strongest Attempt-2 combination. Neither refinement the
+  plan expected to add more - the win-chance term and the lookahead - did. Probes and greedy
+  information carried the result, and the pair strategy was the weakest row.
 
 ---
 
@@ -735,14 +806,21 @@ PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a s
 
 1. **Compute what is worth computing.** The opening-word decision has an exact answer;
    reward-driven learning found it only by luck (PPO) or not at all (the others).
-2. **Optimise the expected score, not raw entropy.** Entropy is the information term; it
-   ignores the win chance and the six-guess cap. The `p` term is what turns the information
-   strategy into a game strategy.
+2. ~~**Optimise the expected score, not raw entropy.**~~ **Measured false.** The win-chance
+   term ties entropy on the validation slice (3.44 against 3.46, §3.9) and on the held-out
+   400 (3.46 against 3.46, §3.10). What separates this attempt from Attempt 2 is not the
+   objective: it is that the objective is *computed* over the full candidate set, and that
+   probes are allowed.
 3. **Keep the two decisions separate.** The opener is a root choice over 2,315 candidates;
    the follow-up is a choice per branch. The expected score evaluates both at every node,
    without one agent having to learn both at once from noise.
-4. **Choose probes deliberately.** A probe is a guess bought for its information. The
-   expected score is the exchange rate between information and a wasted guess.
+4. **Choose probes deliberately.** A probe is a guess bought for its information, and it is
+   the one design choice that paid: removing probes costs 0.083 guesses on the held-out set.
+
+**Verdict.** The attempt succeeded, but not for the reason it was designed around. The
+measured answer to "what makes this work" is: compute the candidate set exactly, allow
+probes, and guess greedily. The win-chance term, the six-guess calibration and the two-ply
+lookahead each cost more complexity than they returned at this sample size.
 
 ---
 
