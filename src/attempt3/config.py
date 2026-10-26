@@ -37,6 +37,8 @@ __all__ = [
     "ALLOW_PROBES",
     "GUESS_SET",
     "GUESS_SET_MODES",
+    "LOOKAHEAD_FIRST_SHORTLIST",
+    "LOOKAHEAD_SECOND_SHORTLIST",
     "MAX_GUESSES",
     "N_TEST_SECRETS",
     "N_TRAIN_SECRETS",
@@ -75,3 +77,17 @@ GUESS_SET = "answers"
 # information against an immediate win (§2.7). With probes disabled the criterion collapses
 # to pure entropy and loses 0.08 guesses, measured in §3.7.
 ALLOW_PROBES = True
+
+# ---------------------------------------------------------------------------
+# The two-ply lookahead (C2)
+# ---------------------------------------------------------------------------
+
+# WHY A SHORTLIST AT ALL: the two-ply value of one first word needs, for each of its
+# branches, the best second word for that branch. Exhaustively that is every first word x
+# every branch x every second word - far too slow for a policy that has to play 200 games.
+# The first words are screened by the one-ply expected score, and the second words by the
+# same score at the node, before either is expanded.
+# WHY 10 AND 10: measured in Phase C (see the run time in the write-up); a wider screen
+# changes the chosen words rarely and costs minutes per game.
+LOOKAHEAD_FIRST_SHORTLIST = 10
+LOOKAHEAD_SECOND_SHORTLIST = 10
