@@ -1,6 +1,6 @@
 # Attempt 3 — information theory as the strategy
 
-**Status:** ✅ **complete.** All four phases are built and measured, with 202 tests. The
+**Status:** ✅ **complete.** All four phases are built and measured, with 211 tests. The
 result: **3.46 average guesses and 100% wins on the 400 held-out secrets**, against 3.77 for
 Attempt 2's best combination and 3.85 for its best learned agent (§3.10). Two findings the
 plan did not predict: the expected-score term ties plain entropy (3.46 against 3.46), and the
@@ -14,6 +14,156 @@ how much of the remaining strategy headroom is reachable from reward alone, and 
 was "the opening-word decision is worth about 0.3 guesses, and the signal to find it is
 barely above the noise". An attempt that computes the decision instead of learning it
 attacks the part of the headroom that the learning-based attempt could not reach.
+
+## Architecture at a glance
+
+Attempt 3 has one loop - *read the evidence, score every playable guess, play the smallest
+score* - and two measurement paths that must not be confused: **the gates** decide the design
+on the validation slice, and **the experiment** measures the finished policies once on the
+held-out 400.
+
+**One turn of one game - the whole policy, top to bottom**
+
+```
+        history: [(guess word, five colours), ...]        <- the only input
+                          │
+                          v
+  ┌───────────────────────────────────────────────┐
+  │ pickers.stateFor(history)                     │  maskFor() from attempt2,
+  │   candidates C = answers consistent so far    │  the same rule the game uses
+  │   guesses    = every unplayed answer          │  (probes stay in the pool)
+  └───────────────────────┬───────────────────────┘
+                          v
+  ┌───────────────────────────────────────────────┐
+  │ patterns.patternCounts(guesses, C)            │  one gather over
+  │   counts[g, p] = n_p                          │  wordle.feedbackTable()
+  └───────────────────────┬───────────────────────┘
+                          v
+  ┌───────────────────────┴───────────────────────┐
+  │ A1: H(g)              │ A1: E[|C'|], Jensen   │
+  └───────────────────────┬───────────────────────┘
+                          v
+  ┌───────────────────────────────────────────────┐
+  │ A2: score(g) = p + (1 - p) (1 + f(H0 - H(g)))  │
+  └───────────────────────┬───────────────────────┘
+                          v
+  ┌───────────────────────────────────────────────┐
+  │ pickers.bestByScore                           │  §2.7 tie-break:
+  │   score, then candidate, then E[|C'|], index  │  written once for all pickers
+  └───────────────────────┬───────────────────────┘
+                          v
+                    guess index g
+                          │
+                          v
+       feedbackTable()[g, secret] ──> five colours   (array read, no feedback())
+                          │
+                          v
+                 history += (word(g), colours)
+                          │
+          ┌───────────────┴───────────────┐
+          v                               v
+   all five green?                  six guesses used?
+          └───────────────┬───────────────┘
+                          v
+                      game over
+```
+
+**The layered modules - what each file is allowed to know**
+
+```
+  ┌─────────────────────────────────────────────────────────────┐
+  │ wordle/ (unchanged) + attempt2.actionMask                   │
+  │   feedbackTable · answersVocab · maskFor                    │
+  └───────────────────────────┬─────────────────────────────────┘
+                              │  answer *indices*, never words
+                              v
+  ┌─────────────────────────────────────────────────────────────┐
+  │ A1 patterns.py                                              │
+  │   histogram -> H(g) · E[|C'|] · Jensen gap                  │
+  └───────────────────────────┬─────────────────────────────────┘
+                              v
+  ┌─────────────────────────────────────────────────────────────┐
+  │ A2 objective.py                                             │
+  │   expected score, plus the rejected c(m) model              │
+  └───────────────────────────┬─────────────────────────────────┘
+                              v
+  ┌─────────────────────────────────────────────────────────────┐
+  │ B0 pickers.py                                               │
+  │   feasible set · unplayed pool · deterministic tie-break    │
+  └───────────────────────────┬─────────────────────────────────┘
+                              v
+  ┌─────────────────────────────────────────────────────────────┐
+  │ B1 entropy   B2 remaining   B3 pair                         │
+  │ C1 expected score           C2 two-ply                      │
+  └───────────────────────────┬─────────────────────────────────┘
+                              v
+  ┌─────────────────────────────────────────────────────────────┐
+  │ D1 experiment.py  -> §3.10 + comparison.png + distribution  │
+  │ play.py           -> interactive / --advise / --auto        │
+  └─────────────────────────────────────────────────────────────┘
+
+  beside the chain, not in it:
+    A0 config.py       constants: anchor 11.5, slope 1.5, answers-only, probes on
+    A3 letterStats.py  diagnostic: frequencies and the 0.923 correlation (§2.6);
+                       the write-up and its tests read it, the pickers do not
+```
+
+**The two measurement paths - the split discipline**
+
+```
+                   ┌─────────────────────────────────┐
+                   │ attempt2.splits (unchanged)     │
+                   │   1,915 training secrets        │
+                   │   400 held-out secrets          │
+                   └───────┬──────────────────┬──────┘
+                           v                  v
+            200 validation secrets      400 held-out secrets
+           (part of the training half)  (unread until Phase D)
+                           │                  │
+        ┌──────────────────┤                  │
+        v                  v                  v
+     Gate A             Gate B, Gate C    experiment.py
+     every number in    B1/B2/B3,         13 policies, one run
+     §2 reproduces      C1 vs no-probe    -> §3.10 + 2 figures
+        │                  │                  │
+        └────────── decisions fixed here ─────┘
+                     (nothing tuned on held-out)
+```
+
+**How to read it.**
+
+- **Data goes to the core, not around it.** Attempt 3 adds **no new core code**: it reuses
+  `loadAnswers`, `answersVocab`, `feedbackTable` and Attempt 2's `maskFor`, and puts
+  everything new under `src/attempt3/`.
+- **Everything is an index.** The pipeline passes `int64` answer indices from the vocabulary,
+  never strings, so the histogram is one `np.ix_` gather and the score arrays line up with
+  the guess array by construction.
+- **The histogram is the only expensive step.** One `patternCounts` call per turn scores all
+  2,315 guesses; everything after it is arithmetic on a `(k, 243)` array.
+- **A3 is a diagnostic, not a policy.** Nothing in the pickers imports `letterStats`; it
+  exists to explain *why* the ranking looks the way it does (§2.6), and the write-up is its
+  only consumer.
+- **The gates and the final table are separate for a reason.** Gates were allowed to change
+  the design on the validation slice; the held-out 400 were read once, by policies that were
+  already frozen. §3.10 is the only result that may be quoted as held-out.
+- **The human interface is the same function.** `play.py` calls the same `pickGuess(history)`
+  as the experiment, with the human in either seat: guess first yourself, or report the
+  colours of the word the strategy proposes.
+
+**Data shapes at each boundary**
+
+| Boundary | Shape / type | Meaning |
+|---|---|---|
+| Answer list | `tuple[str]`, 2,315 | the guess set, and the secret set |
+| Candidate indices | `np.ndarray`, `(m,)`, int64 | the feasible set C, ascending |
+| Guess indices | `np.ndarray`, `(k,)`, int64 | every unplayed answer, probes included |
+| Counts | `np.ndarray`, `(k, 243)`, int32 | `n_p`: candidates per colour pattern |
+| A1 statistics | `(k,)`, float64 | `H(g)`, `E[|C'|]`, Jensen gap |
+| Scores | `(k,)`, float64 | §2.7 expected score, minimised |
+| Chosen guess | `int` | an answer index in `[0, 2315)` |
+| History | `list[tuple[str, tuple[int, ...]]]` | `(word, five colours)` in play order |
+| `PickingState` | dataclass | `candidates`, `guesses` |
+| `EvaluationResult` | dataclass | the same harness and shape as Attempt 2 |
 
 ---
 
@@ -751,6 +901,9 @@ module changes what B1/B2/B3 measure.
 ```bash
 PYTHONPATH=src .venv/bin/python -m attempt3.gateB            # the Phase-B ablations (Gate B)
 PYTHONPATH=src .venv/bin/python -m attempt3.gateC            # C1, its no-probe variant, C2 (Gate C)
+PYTHONPATH=src .venv/bin/python -m attempt3.play             # play: you type guess 1
+PYTHONPATH=src .venv/bin/python -m attempt3.play --advise    # the strategy proposes, you give colours
+PYTHONPATH=src .venv/bin/python -m attempt3.play --strategy b1 --auto --games 100
 PYTHONPATH=src .venv/bin/python -m attempt3.experiment
 PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a smoke check
 .venv/bin/python -m pytest tests/ -q
