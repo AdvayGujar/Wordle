@@ -815,7 +815,8 @@ that the combination is significantly better than the best baseline is *not* sup
 ## 12. How to run and test
 
 ```bash
-# the whole suite (316 tests: 196 pre-existing + 120 new)
+# the whole suite (414 tests at the time of writing: 196 pre-existing, 120 Attempt-2,
+# 98 Attempt-3)
 .venv/bin/python -m pytest tests/ -q
 
 # the Attempt-2 tests on their own

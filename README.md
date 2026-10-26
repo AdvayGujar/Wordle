@@ -10,7 +10,7 @@ different means. Two questions drive it:
 |---|---|---|
 | 1 | supervised candidate-consistency scoring | ✅ [`attempt1.md`](src/attempt1/attempt1.md) |
 | 2 | reinforcement learning — the agent learns a strategy | ✅ [`attempt2.md`](src/attempt2/attempt2.md) |
-| 3 | information theory — *compute* the strategy | 📋 [`attempt3.md`](src/attempt3/attempt3.md) |
+| 3 | information theory — *compute* the strategy | 🚧 Gate A passed (A0–A2) [`attempt3.md`](src/attempt3/attempt3.md) |
 | 4 | the Module-5 math, written from scratch in NumPy | 📋 `plan.md` §10 |
 
 ## Results
@@ -62,11 +62,13 @@ still-consistent candidates, which the observation does not contain — so a lea
 only memorise the training distribution's average. That is exactly the gap Attempt 3 closes by
 *computing* the candidate set.
 
-### Attempts 3 and 4 — planned
+### Attempt 3 — information theory (in progress)
 
-**Attempt 3** (`src/attempt3/attempt3.md`): information theory — the pattern distribution, the
-mutual information a guess carries, and the concave expected-guesses objective, with the
-mathematics and a four-phase build plan.
+**Attempt 3** (`src/attempt3/attempt3.md`) computes the strategy instead of learning it.
+Gate A is passed: `config.py`, `patterns.py` and `objective.py` are built and tested (98
+tests), and the criterion reproduces every opener number quoted in the plan — it opens with
+`raise` (5.878 bits, 61 expected remaining, 132 non-empty branches) at an expected score of
+3.6646. The pickers, the adaptive policy and the experiment follow.
 
 **Attempt 4** (`plan.md` §10): the Module-5 exercise — binary candidate-consistency logistic
 regression in NumPy, hand-derived gradient `Xᵀ(p − y)/N`, finite-difference and
@@ -80,8 +82,8 @@ src/
 ├── wordle/     # shared core: feedback, feedbackTable, vocabulary, game, features, dataset
 ├── attempt1/   # supervised candidate-consistency, solver, attempt1.md
 ├── attempt2/   # reinforcement learning: env, algorithms, harness, play modes, attempt2.md
-└── attempt3/   # attempt3.md — the information-theoretic plan
-tests/          # 316 tests
+└── attempt3/   # information theory: config, patterns, objective (+ attempt3.md)
+tests/          # 414 tests
 ```
 
 ## Usage

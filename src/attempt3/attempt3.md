@@ -1,8 +1,11 @@
 # Attempt 3 — information theory as the strategy
 
-**Status:** 🟨 **A1 implemented and green.** `patterns.py` and its 61 tests are done; A2 is
-next. This file records the mathematics, the measurements that decide the design, the
-criterion the implementation uses, and the remaining build plan.
+**Status:** 🟩 **Gate A passed — A0/A1/A2 implemented.** `config.py`, `patterns.py` and
+`objective.py` are done, with 98 tests. The criterion reproduces the two worked examples of
+§2.7 and every opener number quoted in §2.2, §2.3 and §3.7, and it picks `raise` at the
+empty history. Phase B (the pickers) is next. This file records the mathematics, the
+measurements that decide the design, the criterion the implementation uses, and the
+remaining build plan.
 
 **It replaces the original Attempt 3** (from-scratch binary logistic regression on the
 Module-5 math), which is deferred to Attempt 4. The reasoning: Attempt 2 measured exactly
@@ -205,28 +208,44 @@ branches and one huge branch** is therefore better than one that produces a flat
 *even if the flat spread has more information*. Entropy rewards flatness; this objective
 rewards the other shape.
 
-#### 2.5.1 Measured: the objective is a bad policy
+#### 2.5.1 Measured: why the objective is not the decision rule
 
-The functional was implemented literally and used as a greedy per-turn rule. It fails, for
-three reasons that are worth keeping in the write-up:
+**Revised at Gate A.** The functional is now implemented (`expectedGuesses` in
+`objective.py`) and was re-measured over all 2,315 answers. Two claims from the first draft
+of this section did not survive that measurement; the corrected statements are below. The
+decision itself is unchanged: the functional stays as a tested, documented model, and the
+picker uses the expected-score criterion of §2.7.
 
-1. **It ranks the wrong openers.** Minimising the functional puts `fuzzy`, `vivid` and
-   `mummy` at the top (extreme skew, many tiny branches and one huge one), not `slate` or
-   `raise`. It ranks `trace` 1, `slate` 2 and `raise` 18 by the proxy.
-2. **It never guesses the answer.** Once the feasible set collapses to one word, every
-   guess scores about the same, so the rule keeps probing and loses. Measured: **0% win
-   rate over 100 held-out games**.
+1. **It ranks the openers differently, but not in the direction the draft claimed.**
+   Minimising the functional ranks `trace` 1, `slate` 2 and `raise` 18 - that part of the
+   draft holds. It does **not** put `fuzzy`, `vivid` and `mummy` at the top: measured over
+   all 2,315 answers they rank **2,314, 2,303 and 2,306**. The concavity argument above is
+   correct, but the cap saturates a huge branch at 5 further guesses, so skew is expensive
+   in expectation rather than cheap. Over the whole answer list the functional correlates
+   with entropy at **0.95** (Spearman; top-20 overlap 11/20), so at the root the two
+   criteria are close cousins, not opposites.
+2. **The 0% win rate belongs to the uncorrected formula.** The greedy rule that never
+   guessed the answer was the *naive* version, before the all-green branch was made free -
+   which is exactly the correction the paragraph above calls for. With the correction the
+   singleton case strictly prefers the answer (score 1, against 2 for a probe), so the loss
+   rate of the corrected model is **not established**. What the correction does not fix is
+   the last turn.
 3. **It is indifferent on the last turn.** With one guess left, a win and a loss both cost
-   one more guess under the cap, so the objective cannot distinguish them.
+   one more guess under the cap, so the objective cannot distinguish them. This is the
+   failure that survives the correction, and it is why the criterion needs the win-chance
+   term of §2.7 regardless of how well it ranks openers.
 
-The root cause is the cap: \(c(m) \le 5\) makes a huge branch almost free, and the proxy
-then rewards concentrating the mass there instead of resolving it. A correct version also
-has to give the all-green branch a further cost of **0** (the naive formula overcounts by
-\(1/|C|\); small for the opener, but wrong in general).
+The cap is the root cause, but in the opposite direction to the first draft: because
+\(c(m) \le 5\), every branch larger than a handful of words costs nearly the same, so the
+functional cannot separate two good openers in the way that matters and ends up tracking
+entropy. What it does not add is anything on the last turn, where a win and a loss cost the
+same. A correct version also has to give the all-green branch a further cost of **0** (the
+naive formula overcounts by \(1/|C|\); small for the opener, but wrong in general).
 
 **Conclusion:** the \(c(m)\) functional stays in `objective.py` as a documented, tested
-model — it is the clearest explanation of why entropy and expected guesses disagree — but
-the picker uses the expected-score criterion in §2.7.
+model — it is the clearest statement of what the six-guess cap does to the cost of a branch
+— but the picker uses the expected-score criterion in §2.7, which can win immediately and
+can tell the last turn from the one before it.
 
 ### 2.6 Why the letter-level theory works
 
@@ -562,7 +581,7 @@ one vectorised operation over the feedback table, not a Python loop per candidat
 | Test file | What it pins |
 |---|---|
 | `tests/test_attempt3Patterns.py` | Histogram equals the slow `feedback()` path; entropy of a uniform \(k\)-way split is \(\log_2 k\); \(\mathbb{E}[|C'|]\) matches a hand count; Jensen gap \(\ge 0\); empty set; purity and no input mutation. |
-| `tests/test_attempt3Objective.py` | \(f(0)=1\), \(f\) increasing; the two worked examples of §2.7; candidate beats an equally informative probe; singleton set picks the answer; \(c(m)\) matches brute force; the green branch costs zero further guesses. |
+| `tests/test_attempt3Objective.py` | \(f(0)=1\), \(f\) increasing, \(f(11.5)\approx 3.5\); the two worked examples of §2.7; the whole score agrees with a slow `feedback()`-per-pair reference, including repeated letters; candidate beats an equally informative probe; singleton set picks the answer; \(c(m)\) matches brute force; the green branch costs zero further guesses. |
 | `tests/test_attempt3LetterStats.py` | Frequencies, distinct-letter buckets, the correlation. |
 | `tests/test_attempt3EntropyPicker.py` | Picks the maximum-entropy word; guesses a singleton; never repeats; deterministic. |
 | `tests/test_attempt3RemainingPicker.py` | Minimises expected remaining; never repeats. |
