@@ -99,8 +99,8 @@ src/
 ├── wordle/     # shared core: feedback, feedbackTable, vocabulary, game, features, dataset
 ├── attempt1/   # supervised candidate-consistency, solver, attempt1.md
 ├── attempt2/   # reinforcement learning: env, algorithms, harness, play modes, attempt2.md
-└── attempt3/   # information theory: patterns, objective, pickers, lookahead, experiment (+ attempt3.md)
-tests/          # 518 tests
+└── attempt3/   # information theory: patterns, objective, pickers, lookahead, play, experiment
+tests/          # 527 tests
 ```
 
 ## Usage
@@ -126,11 +126,18 @@ PYTHONPATH=src .venv/bin/python -m attempt2.experiment
 # Attempt 2: train an agent (about 27 minutes for 250k episodes)
 PYTHONPATH=src .venv/bin/python -m attempt2.train --algo reinforce --episodes 250000 \
     --learning-rate 0.01 --entropy-start 0.2 --entropy-end 0.01
+
+# Attempt 3: play the computed strategy, or measure it
+PYTHONPATH=src .venv/bin/python -m attempt3.play                 # you type guess 1, it plays on
+PYTHONPATH=src .venv/bin/python -m attempt3.play --advise        # it proposes, you give colours
+PYTHONPATH=src .venv/bin/python -m attempt3.play --auto --games 400
+PYTHONPATH=src .venv/bin/python -m attempt3.play --strategy b1   # or c1 | c1-noprobe | c2 | b2 | b3
+PYTHONPATH=src .venv/bin/python -m attempt3.experiment
 ```
 
-Colours for the advisor modes: `GYXXG`, `2 1 0 0 2`, or `green yellow grey grey green`. The
-play modes need a trained agent in `src/attempt2/artifacts/`; if it is missing they print the
-command to train one.
+Colours for the advisor modes: `GYXXG`, `2 1 0 0 2`, or `green yellow grey grey green`.
+Attempt 2's play modes need a trained agent in `src/attempt2/artifacts/`; if it is missing they
+print the command to train one. Attempt 3's need nothing — the strategy is code.
 
 ## Setup
 
