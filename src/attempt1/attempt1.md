@@ -167,13 +167,13 @@ does that, and `dataset.splitSecrets` gives disjoint secrets for the candidate-s
 
 With a uniformly chosen secret and deterministic feedback:
 
-\[
+$$
 P(\text{secret}=w \mid \text{evidence}) \propto
 \begin{cases}
 1 & \text{if } w \text{ is consistent with every round},\\
 0 & \text{otherwise.}
 \end{cases}
-\]
+$$
 
 The guess policy depends only on past feedback, so it does not break the symmetry. Therefore
 **every feedback-consistent candidate is equally likely**. A supervised model can learn

@@ -158,7 +158,7 @@ held-out 400.
 | Candidate indices | `np.ndarray`, `(m,)`, int64 | the feasible set C, ascending |
 | Guess indices | `np.ndarray`, `(k,)`, int64 | every unplayed answer, probes included |
 | Counts | `np.ndarray`, `(k, 243)`, int32 | `n_p`: candidates per colour pattern |
-| A1 statistics | `(k,)`, float64 | `H(g)`, `E[|C'|]`, Jensen gap |
+| A1 statistics | `(k,)`, float64 | `H(g)`, `E[\|C'\|]`, Jensen gap |
 | Scores | `(k,)`, float64 | §2.7 expected score, minimised |
 | Chosen guess | `int` | an answer index in `[0, 2315)` |
 | History | `list[tuple[str, tuple[int, ...]]]` | `(word, five colours)` in play order |
@@ -199,19 +199,19 @@ over strategies.
 
 ### 2.1 The setup
 
-Let \(\Omega\) be the answer set (\(|\Omega| = 2315\)) and let the secret be drawn
-uniformly, \(P(S = s) = 1/|\Omega|\). After a history \(h = (g_1, p_1), \dots, (g_t, p_t)\)
+Let $\Omega$ be the answer set ($|\Omega| = 2315$) and let the secret be drawn
+uniformly, $P(S = s) = 1/|\Omega|$. After a history $h = (g_1, p_1), \dots, (g_t, p_t)$
 of guesses and their colour patterns, the **feasible set** is
 
-\[
+$$
 C(h) = \bigl\{ s \in \Omega \;:\; p(g_i, s) = p_i \text{ for all } i \bigr\}.
-\]
+$$
 
-The posterior over the secret is **uniform on \(C(h)\)**:
+The posterior over the secret is **uniform on $C(h)$**:
 
-\[
+$$
 P(S = s \mid h) = \frac{1}{|C(h)|} \quad \text{for } s \in C(h), \qquad 0 \text{ otherwise}.
-\]
+$$
 
 This is the uniform-posterior theorem from Attempt 1, and it is the single most important
 fact in the project: **no method can rank the true secret above another consistent
@@ -220,109 +220,109 @@ guess*, and *which guess to make in order to shrink the consistent set fastest*.
 
 ### 2.2 What a guess carries
 
-A guess \(g\) against a secret \(s\) produces a colour pattern \(p(g, s) \in \{0,1,2\}^5\),
-so there are \(3^5 = 243\) possible patterns. Against a feasible set \(C\), write
+A guess $g$ against a secret $s$ produces a colour pattern $p(g, s) \in \{0,1,2\}^5$,
+so there are $3^5 = 243$ possible patterns. Against a feasible set $C$, write
 
-\[
+$$
 n_p = \bigl|\{ s \in C : p(g, s) = p \}\bigr|,
 \qquad
 P(p \mid g, C) = \frac{n_p}{|C|}.
-\]
+$$
 
 Because the pattern is a deterministic function of the secret, the information the guess
 carries is the entropy of its own pattern distribution:
 
-\[
+$$
 I(g; S \mid C) = H\bigl(P(\cdot \mid g, C)\bigr)
 = -\sum_{p} \frac{n_p}{|C|} \log_2 \frac{n_p}{|C|}
 \quad \text{bits}.
-\]
+$$
 
-**Read this carefully, because the sign is easy to say backwards.** \(H\) is the entropy of
-the **feedback distribution**, not of the word and not of the candidate set. A *high* \(H\)
+**Read this carefully, because the sign is easy to say backwards.** $H$ is the entropy of
+the **feedback distribution**, not of the word and not of the candidate set. A *high* $H$
 means the colours are hard to predict, i.e. the guess separates the candidates into many
-similarly sized groups, so it carries a lot of information. A *low* \(H\) means the colours
-are nearly the same whatever the secret is: a nearly useless guess. **We maximise \(H\).**
+similarly sized groups, so it carries a lot of information. A *low* $H$ means the colours
+are nearly the same whatever the secret is: a nearly useless guess. **We maximise $H$.**
 
 What we want to be *small* is the uncertainty that remains after the guess. In expectation:
 
-\[
-\mathbb{E}\bigl[\,|C'| \mid g, C\,\bigr]
+$$
+\mathbb{E}\bigl[\,\lvert C'\rvert \mid g, C\,\bigr]
 = \sum_{p} \frac{n_p}{|C|}\, n_p
 = \frac{1}{|C|} \sum_{p} n_p^{2}.
-\]
+$$
 
 The two are linked **exactly** through the logarithm:
 
-\[
-\mathbb{E}\bigl[\log_2 |C'| \,\big|\, g, C\bigr] = \log_2 |C| - H(g).
-\]
+$$
+\mathbb{E}\bigl[\log_2 \lvert C'\rvert \,\big|\, g, C\bigr] = \log_2 |C| - H(g).
+$$
 
-That is an identity, not an approximation. The expected *size* \(\mathbb{E}[|C'|]\) is not
-\(2^{\log_2|C| - H(g)}\), because the logarithm is concave; the difference is the Jensen
+That is an identity, not an approximation. The expected *size* $\mathbb{E}[\lvert C'\rvert]$ is not
+$2^{\log_2|C| - H(g)}$, because the logarithm is concave; the difference is the Jensen
 gap of §2.3. What matters for the strategy is the identity: maximising the guess's pattern
 entropy is the same as minimising the expected log of the remaining candidate set. "Pick the
 word with the least entropy" would pick the *least* informative guess.
 
 For the best opener by information, `raise`:
 
-\[
-H = 5.878\ \text{bits}, \qquad \mathbb{E}[|C'|] = 61.0,
+$$
+H = 5.878\ \text{bits}, \qquad \mathbb{E}[\lvert C'\rvert] = 61.0,
 \qquad \text{non-empty branches} = 132, \qquad \text{largest branch} = 168.
-\]
+$$
 
 So the root splits 2,315 secrets into 132 groups, and the largest group (the all-grey
 branch) still has 168 possible answers.
 
 ### 2.3 The two criteria are related but not the same
 
-Write \(m = |C|\). Since \(H = \log_2 m - \mathbb{E}[\log_2 n_p]\) and \(\log_2\) is
+Write $m = |C|$. Since $H = \log_2 m - \mathbb{E}[\log_2 n_p]$ and $\log_2$ is
 concave, Jensen's inequality gives
 
-\[
+$$
 \mathbb{E}[\log_2 n_p] \le \log_2 \mathbb{E}[n_p],
-\]
+$$
 
 and therefore
 
-\[
+$$
 H \ge \log_2 \frac{m}{\mathbb{E}[n_p]}.
-\]
+$$
 
-The **Jensen gap** is the distance from \(H\) to that lower bound:
+The **Jensen gap** is the distance from $H$ to that lower bound:
 
-\[
+$$
 \underbrace{H - \log_2 \frac{m}{\mathbb{E}[n_p]}}_{\ge 0}
 = \log_2 \mathbb{E}[n_p] - \mathbb{E}[\log_2 n_p] \ge 0.
-\]
+$$
 
 It is zero when every non-empty branch has the same size, and grows as the branch sizes
 become more unequal. For `slate`:
 
-\[
+$$
 H = 5.8558\ \text{bits}, \qquad
-\mathbb{E}[|C'|] = 71.57, \qquad
+\mathbb{E}[\lvert C'\rvert] = 71.57, \qquad
 \log_2 \frac{2315}{71.57} = 5.0155\ \text{bits},
-\]
+$$
 
 so the Jensen gap is **0.8403 bits**. Two openers with the same entropy can have very
 different expected remaining counts, and vice versa — which is why the two criteria produce
 different rankings (measured in §3.2).
 
-> **Correction.** An earlier version of this section claimed \(H \le \log_2 \mathbb{E}[n_p]\)
-> and called the signed difference \(\log_2 \mathbb{E}[n_p] - H\) the "Jensen gap" (0.31
+> **Correction.** An earlier version of this section claimed $H \le \log_2 \mathbb{E}[n_p]$
+> and called the signed difference $\log_2 \mathbb{E}[n_p] - H$ the "Jensen gap" (0.31
 > bits for `slate`). That inequality is backwards, and the signed difference can be
-> negative: for two equal branches \(H = 1\) and \(\mathbb{E}[n_p] = 1\), so it is \(-1\).
+> negative: for two equal branches $H = 1$ and $\mathbb{E}[n_p] = 1$, so it is $-1$.
 > The gap implemented in `patterns.py` is the non-negative quantity above. For `slate`,
-> \(\log_2 \mathbb{E}[n_p] - H = 0.3056\), which is *not* a Jensen gap.
+> $\log_2 \mathbb{E}[n_p] - H = 0.3056$, which is *not* a Jensen gap.
 
 ### 2.4 The bit budget
 
-\[
+$$
 \underbrace{\log_2 |\Omega|}_{\text{the secret}} = \log_2 2315 = 11.18 \ \text{bits},
 \qquad
 \underbrace{\log_2 243}_{\text{one guess, at best}} = 7.92 \ \text{bits}.
-\]
+$$
 
 One guess cannot carry the secret (7.92 < 11.18). **Two guesses can** (15.85 > 11.18) —
 but only on paper; see §3.4 for why the word constraint eats that.
@@ -333,27 +333,27 @@ which sees a smaller and therefore less informative feasible set.
 
 ### 2.5 The six-guess objective — useful as a model, not as the decision rule
 
-The game ends after six guesses. If a guess leaves a feasible set of size \(m\), and the
+The game ends after six guesses. If a guess leaves a feasible set of size $m$, and the
 remaining guesses are made uniformly at random among the consistent candidates, the number
-of further guesses needed is \(\mathbb{E}[\min(T, 5)]\) with \(T\) uniform on
-\(\{1, \dots, m\}\):
+of further guesses needed is $\mathbb{E}[\min(T, 5)]$ with $T$ uniform on
+$\{1, \dots, m\}$:
 
-\[
+$$
 c(m) = \mathbb{E}[\min(T,5)] =
 \begin{cases}
 \dfrac{m+1}{2} & m < 5 \\[6pt]
 5 - \dfrac{10}{m} & m \ge 5
 \end{cases}
-\]
+$$
 
-and the expected number of guesses for an opener \(g\) is the concave functional
+and the expected number of guesses for an opener $g$ is the concave functional
 
-\[
+$$
 \mathbb{E}[\text{guesses}] = 1 + \sum_{p} \frac{n_p}{|C|}\; c(n_p).
-\]
+$$
 
-**This concavity is real and it explains the disagreement between criteria.** For \(m \ge 5\),
-\(c(m) = 5 - 10/m\) is concave and increasing, so the marginal cost of another candidate in
+**This concavity is real and it explains the disagreement between criteria.** For $m \ge 5$,
+$c(m) = 5 - 10/m$ is concave and increasing, so the marginal cost of another candidate in
 a big branch is small: those games are lost either way. An opener that produces **many tiny
 branches and one huge branch** is therefore better than one that produces a flat spread,
 *even if the flat spread has more information*. Entropy rewards flatness; this objective
@@ -387,13 +387,13 @@ picker uses the expected-score criterion of §2.7.
    term of §2.7 regardless of how well it ranks openers.
 
 The cap is the root cause, but in the opposite direction to the first draft: because
-\(c(m) \le 5\), every branch larger than a handful of words costs nearly the same, so the
+$c(m) \le 5$, every branch larger than a handful of words costs nearly the same, so the
 functional cannot separate two good openers in the way that matters and ends up tracking
 entropy. What it does not add is anything on the last turn, where a win and a loss cost the
 same. A correct version also has to give the all-green branch a further cost of **0** (the
-naive formula overcounts by \(1/|C|\); small for the opener, but wrong in general).
+naive formula overcounts by $1/|C|$; small for the opener, but wrong in general).
 
-**Conclusion:** the \(c(m)\) functional stays in `objective.py` as a documented, tested
+**Conclusion:** the $c(m)$ functional stays in `objective.py` as a documented, tested
 model — it is the clearest statement of what the six-guess cap does to the cost of a branch
 — but the picker uses the expected-score criterion in §2.7, which can win immediately and
 can tell the last turn from the one before it.
@@ -419,7 +419,7 @@ note; re-measured on this project's list it is **0.923** (see §7).
 
 Together these explain the empirical ranking without any search: the best openers are
 permutations of the commonest letters. The measured average-guess top twenty are built from
-\(\{a, e, t, l, s, c, r, n, p\}\), and six of them (`slate`, `least`, `slant`, `stale`,
+$\{a, e, t, l, s, c, r, n, p\}$, and six of them (`slate`, `least`, `slant`, `stale`,
 `dealt`, `leant`) are permutations of the *same five letters* — because **the information
 in an opening word is in which common letters it tests, not in their arrangement**. Note
 that the *entropy* top twenty is a different list and does contain `d`, `i` and `o`; §7
@@ -440,62 +440,62 @@ Maximising entropy is the right *information* objective, but it is not quite the
 six-guess cap. A guess that is nearly as informative but could end the game now should
 sometimes beat a slightly more informative probe.
 
-The policy therefore minimises an **expected-score** criterion. For a feasible set \(C\)
-with \(m = |C|\) and a uniform posterior:
+The policy therefore minimises an **expected-score** criterion. For a feasible set $C$
+with $m = |C|$ and a uniform posterior:
 
-- the current uncertainty is \(H_0 = \log_2 m\);
-- the guess's pattern entropy is \(H(g)\), from §2.2;
-- the information it leaves behind is \(H_0 - H(g)\);
+- the current uncertainty is $H_0 = \log_2 m$;
+- the guess's pattern entropy is $H(g)$, from §2.2;
+- the information it leaves behind is $H_0 - H(g)$;
 - the chance it wins immediately is
 
-\[
+$$
 p(g) = \begin{cases} 1/m & g \in C \\ 0 & g \notin C \end{cases}
-\]
+$$
 
 and the score is
 
-\[
+$$
 \boxed{
 \operatorname{score}(g) = p(g) + \bigl(1 - p(g)\bigr)\Bigl(1 + f\bigl(H_0 - H(g)\bigr)\Bigr)
 }
-\]
+$$
 
 with
 
-\[
+$$
 f(x) = 2^{-x} + 2\bigl(1 - 2^{-x}\bigr) + \frac{1.5\,x}{11.5}.
-\]
+$$
 
 The guess with the **smallest** score is played.
 
 **What each term means.**
 
-- \(p(g)\): if the guess is the secret, the game ends now, and the total cost is 1.
-- \(1 + f(H_0 - H(g))\): otherwise the guess costs one, and \(f\) estimates how many more
+- $p(g)$: if the guess is the secret, the game ends now, and the total cost is 1.
+- $1 + f(H_0 - H(g))$: otherwise the guess costs one, and $f$ estimates how many more
   guesses the *remaining* uncertainty implies, in the same units.
-- \(f(0) = 1\): if the guess leaves no uncertainty and it was not the answer, exactly one
+- $f(0) = 1$: if the guess leaves no uncertainty and it was not the answer, exactly one
   more guess is needed to name the answer.
-- \(f(11.5) \approx 3.50\): a full board's worth of uncertainty is calibrated to about 3.5
-  further guesses. The \(2^{-x}\) and \(2(1-2^{-x})\) terms are the one-guess and two-guess
-  contributions of a uniform set of size \(2^x\); the linear term calibrates the tail.
+- $f(11.5) \approx 3.50$: a full board's worth of uncertainty is calibrated to about 3.5
+  further guesses. The $2^{-x}$ and $2(1-2^{-x})$ terms are the one-guess and two-guess
+  contributions of a uniform set of size $2^x$; the linear term calibrates the tail.
   The constants `11.5` and `1.5` are **fixed before any evaluation** and are not tuned on
   the held-out secrets (a sensitivity check belongs on the validation slice).
 
-**Why probes are necessary.** For a candidate, \(p = 1/m\); for a probe, \(p = 0\). A
+**Why probes are necessary.** For a candidate, $p = 1/m$; for a probe, $p = 0$. A
 candidate with slightly less information can beat a probe because it can win now. If the
-guess set is restricted to \(C\), then \(p = 1/m\) for *every* guess, the \(p\) term is
-constant, and the criterion collapses to "maximise \(H(g)\)" — plain entropy, with none of
+guess set is restricted to $C$, then $p = 1/m$ for *every* guess, the $p$ term is
+constant, and the criterion collapses to "maximise $H(g)$" — plain entropy, with none of
 the endgame reasoning. Probes are what give the criterion something to trade off.
 
 **Two worked examples.**
 
-- Two candidates left. Guessing one: \(p = 0.5\), \(H = 1 = H_0\), so
-  score \(= 0.5 + 0.5(1 + f(0)) = 1.5\). A probe that splits them 1–1:
-  \(p = 0\), score \(= 1 + f(0) = 2.0\). The candidate wins, correctly: guessing it takes
+- Two candidates left. Guessing one: $p = 0.5$, $H = 1 = H_0$, so
+  score $= 0.5 + 0.5(1 + f(0)) = 1.5$. A probe that splits them 1–1:
+  $p = 0$, score $= 1 + f(0) = 2.0$. The candidate wins, correctly: guessing it takes
   1 guess half the time and 2 the other half, average 1.5; the probe always takes 2.
-- 100 candidates, \(H_0 = 6.64\). A probe with \(H = 6\): score
-  \(= 1 + f(0.64) \approx 2.44\). A candidate with \(H = 1\):
-  \(p = 0.01\), score \(\approx 0.01 + 0.99(1 + f(5.64)) \approx 3.69\). The probe wins.
+- 100 candidates, $H_0 = 6.64$. A probe with $H = 6$: score
+  $= 1 + f(0.64) \approx 2.44$. A candidate with $H = 1$:
+  $p = 0.01$, score $\approx 0.01 + 0.99(1 + f(5.64)) \approx 3.69$. The probe wins.
 
 **Ties.** The score is a float; exact ties are rare. The deterministic tie-break is:
 prefer a candidate, then the smaller expected remaining count, then the lower index. This
@@ -505,9 +505,9 @@ is bookkeeping, not part of the information criterion.
 
 A Wordle strategy **is** a decision tree:
 
-- a **node** is a feasible set \(C\) plus the words already played;
+- a **node** is a feasible set $C$ plus the words already played;
 - an **edge** is one of the 243 colour patterns;
-- the **child** is the subset \(C_p = \{s \in C : p(g, s) = p\}\);
+- the **child** is the subset $C_p = \{s \in C : p(g, s) = p\}$;
 - a **leaf** is a singleton (solved) or a node at depth six (lost).
 
 The globally optimal tree minimises expected depth over the uniform secret. Solving that
@@ -527,7 +527,7 @@ This is why the phrase "least entropy" is the wrong picture. At a node we want t
 the guess that achieves it is the one with the **largest** pattern entropy. The tree framing
 also makes the cost visible: a high-entropy guess near the root pays for itself across
 2,315 secrets; a high-entropy guess with one candidate left is worthless, which is exactly
-what the \(p\) term prevents.
+what the $p$ term prevents.
 
 ---
 
@@ -593,7 +593,7 @@ puts at the very top of the list.
 
 ### 3.4 Can two guesses identify the word? The budget says yes, the words say no
 
-The budget: \(2 \times 7.92 = 15.85 > 11.18\) bits, so two guesses *should* suffice. The
+The budget: $2 \times 7.92 = 15.85 > 11.18$ bits, so two guesses *should* suffice. The
 measurement, with an **oracle** that knows the first branch and picks the best second word
 for it (searched over all 2,315):
 
@@ -827,7 +827,7 @@ in `src/wordle/`.
 2. **Probes are allowed.** A guess does **not** have to be consistent with the feedback.
    It must be a 5-letter answer, not already played. Probes are what make the expected-score
    criterion different from plain entropy (§2.7).
-3. **Decision rule: expected score (§2.7).** Not raw entropy, and not the \(c(m)\)
+3. **Decision rule: expected score (§2.7).** Not raw entropy, and not the $c(m)$
    functional of §2.5 (which is kept as a documented, rejected model).
 4. **Opener: whatever the criterion picks at the empty history.** With the answers-only
    guess set and a uniform prior that is `raise`. No separate exhaustive opener search is
@@ -844,8 +844,8 @@ in `src/wordle/`.
 | # | Module | File | Purpose |
 |---|---|---|---|
 | A0 | `config` | `src/attempt3/config.py` | Attempt-3 constants only: the score anchor and slope, max guesses, guess-set choice, validation sizes. The split seed and sizes are re-exported from `attempt2` so there is one split protocol. |
-| A1 | `patterns` | `src/attempt3/patterns.py` | The 243-bin pattern histogram over a feasible set; \(n_p\); \(H(P(\cdot\mid g,C))\); \(\mathbb{E}[|C'|]\); the Jensen gap. Vectorised against `wordle.feedbackTable`. |
-| A2 | `objective` | `src/attempt3/objective.py` | `entropyToExpectedScore`, `expectedScore` / `scoreGuesses` (§2.7); plus the \(c(m)\) functional and its exact evaluator, kept as the documented rejected model. |
+| A1 | `patterns` | `src/attempt3/patterns.py` | The 243-bin pattern histogram over a feasible set; $n_p$; $H(P(\cdot\mid g,C))$; $\mathbb{E}[\lvert C'\rvert]$; the Jensen gap. Vectorised against `wordle.feedbackTable`. |
+| A2 | `objective` | `src/attempt3/objective.py` | `entropyToExpectedScore`, `expectedScore` / `scoreGuesses` (§2.7); plus the $c(m)$ functional and its exact evaluator, kept as the documented rejected model. |
 | A3 | `letterStats` | `src/attempt3/letterStats.py` | Letter-frequency statistics that explain the ranking (§2.6); used to explain results and to sanity-check hand-written guesses. |
 
 **A1 and A2 are the important ones.** Everything else consumes them. The histogram must be
@@ -857,7 +857,7 @@ one vectorised operation over the feedback table, not a Python loop per candidat
 |---|---|---|---|
 | B0 | `pickers` | `src/attempt3/pickers.py` | **Added during Phase B.** The state every picker needs — the feasible set and the unplayed pool, read from the history through `attempt2.actionMask.maskFor` — plus the §2.7 deterministic tie-break, written once so three ablations cannot break a tie three ways. |
 | B1 | `entropyPicker` | `src/attempt3/entropyPicker.py` | Greedy per-turn maximiser of the pattern entropy — the pure-information ablation, and the deferred `entropy.py` of the original plan (§6.6). Must include the singleton endgame rule. |
-| B2 | `remainingPicker` | `src/attempt3/remainingPicker.py` | Greedy per-turn minimiser of \(\mathbb{E}[|C'|]\). |
+| B2 | `remainingPicker` | `src/attempt3/remainingPicker.py` | Greedy per-turn minimiser of $\mathbb{E}[\lvert C'\rvert]$. |
 | B3 | `pairPicker` | `src/attempt3/pairPicker.py` | A fixed pair of words chosen jointly to maximise the information of the pair — the "two words" idea of §3.4. |
 | B4 | `gateB` | `src/attempt3/gateB.py` | **Added during Phase B.** The Gate B measurement harness: runs B1/B2/B3 through `attempt2.eval.evaluateValidation` on the 200 validation secrets and writes `artifacts/gateB-results.json`. Phase D's `experiment.py` supersedes it for the final table. |
 
@@ -884,8 +884,8 @@ module changes what B1/B2/B3 measure.
 
 | Test file | What it pins |
 |---|---|
-| `tests/test_attempt3Patterns.py` | Histogram equals the slow `feedback()` path; entropy of a uniform \(k\)-way split is \(\log_2 k\); \(\mathbb{E}[|C'|]\) matches a hand count; Jensen gap \(\ge 0\); empty set; purity and no input mutation. |
-| `tests/test_attempt3Objective.py` | \(f(0)=1\), \(f\) increasing, \(f(11.5)\approx 3.5\); the two worked examples of §2.7; the whole score agrees with a slow `feedback()`-per-pair reference, including repeated letters; candidate beats an equally informative probe; singleton set picks the answer; \(c(m)\) matches brute force; the green branch costs zero further guesses. |
+| `tests/test_attempt3Patterns.py` | Histogram equals the slow `feedback()` path; entropy of a uniform $k$-way split is $\log_2 k$; $\mathbb{E}[\lvert C'\rvert]$ matches a hand count; Jensen gap $\ge 0$; empty set; purity and no input mutation. |
+| `tests/test_attempt3Objective.py` | $f(0)=1$, $f$ increasing, $f(11.5)\approx 3.5$; the two worked examples of §2.7; the whole score agrees with a slow `feedback()`-per-pair reference, including repeated letters; candidate beats an equally informative probe; singleton set picks the answer; $c(m)$ matches brute force; the green branch costs zero further guesses. |
 | `tests/test_attempt3LetterStats.py` | Frequencies, distinct-letter buckets, the correlation; the occurrence definition (0.923, not 0.9365); malformed words and frequency arrays; the cached entropy array cannot be corrupted. |
 | `tests/test_attempt3Pickers.py` | **Added with B0.** The feasible set equals the slow `candidatesMatching()` result; the pool excludes played words and includes probes; the tie-break order is score, candidate, expected remaining, index; malformed score arrays fail loudly. |
 | `tests/test_attempt3EntropyPicker.py` | Opens with `raise`; picks the maximum-entropy word; plays a probe after `raise` with one yellow; guesses a singleton; never repeats; deterministic. |
@@ -939,8 +939,8 @@ PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a s
 - **The uniform posterior still holds.** No computation can rank the true secret above
   another consistent candidate. What is computed is *which guess to make* — a strategy, not
   a prediction.
-- **The constants.** `11.5` is close to \(\log_2 2315 = 11.18\) but not equal to it; it is
-  the calibration anchor of the \(f\) function. Check sensitivity on the validation slice,
+- **The constants.** `11.5` is close to $\log_2 2315 = 11.18$ but not equal to it; it is
+  the calibration anchor of the $f$ function. Check sensitivity on the validation slice,
   never on the held-out 400.
 - **Probes and the harness.** Off-candidate guesses are legal, not illegal. The Attempt-2
   counter is reused and relabelled; the raw win-rate and average-guess numbers are
@@ -982,7 +982,7 @@ lookahead each cost more complexity than they returned at this sample size.
 These are recorded because the results section must not repeat claims that the data does not
 support.
 
-1. **§2.5's \(c(m)\) functional is not the decision rule.** Re-measured at Gate A over all
+1. **§2.5's $c(m)$ functional is not the decision rule.** Re-measured at Gate A over all
    2,315 answers, it ranks `trace` 1, `slate` 2 and `raise` 18, correlates with entropy at
    0.95, and puts `fuzzy`, `vivid` and `mummy` near the **bottom** - the opposite of what
    the first draft claimed. The 0-1% win rate was measured on the naive version that
@@ -1003,8 +1003,8 @@ support.
    criterion to plain entropy (§2.7) and measures 3.545 instead of 3.4625. It stays as an
    ablation row, not as the build.
 6. **§2.3's Jensen inequality was backwards.** The correct statement is
-   \(H \ge \log_2(m / \mathbb{E}[|C'|])\); the gap is non-negative and is zero for a
+   $H \ge \log_2(m / \mathbb{E}[\lvert C'\rvert])$; the gap is non-negative and is zero for a
    uniform branch split. The 0.31-bit figure was the signed
-   \(\log_2 \mathbb{E}[|C'|] - H\), which can be negative (two equal branches: \(-1\)).
+   $\log_2 \mathbb{E}[\lvert C'\rvert] - H$, which can be negative (two equal branches: $-1$).
    `patterns.py` implements the correct gap and
    `tests/test_attempt3Patterns.py` pins it; for `slate` it is **0.8403 bits**.
