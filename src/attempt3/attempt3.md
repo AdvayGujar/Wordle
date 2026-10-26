@@ -204,7 +204,7 @@ uniformly, $P(S = s) = 1/|\Omega|$. After a history $h = (g_1, p_1), \dots, (g_t
 of guesses and their colour patterns, the **feasible set** is
 
 $$
-C(h) = \bigl\{ s \in \Omega \;:\; p(g_i, s) = p_i \text{ for all } i \bigr\}.
+C(h) = \bigl\lbrace s \in \Omega \thickspace:\thickspace p(g_i, s) = p_i \text{ for all } i \bigr\rbrace.
 $$
 
 The posterior over the secret is **uniform on $C(h)$**:
@@ -220,11 +220,11 @@ guess*, and *which guess to make in order to shrink the consistent set fastest*.
 
 ### 2.2 What a guess carries
 
-A guess $g$ against a secret $s$ produces a colour pattern $p(g, s) \in \{0,1,2\}^5$,
+A guess $g$ against a secret $s$ produces a colour pattern $p(g, s) \in \lbrace 0,1,2\rbrace^5$,
 so there are $3^5 = 243$ possible patterns. Against a feasible set $C$, write
 
 $$
-n_p = \bigl|\{ s \in C : p(g, s) = p \}\bigr|,
+n_p = \bigl|\lbrace s \in C : p(g, s) = p \rbrace\bigr|,
 \qquad
 P(p \mid g, C) = \frac{n_p}{|C|}.
 $$
@@ -247,15 +247,15 @@ are nearly the same whatever the secret is: a nearly useless guess. **We maximis
 What we want to be *small* is the uncertainty that remains after the guess. In expectation:
 
 $$
-\mathbb{E}\bigl[\,\lvert C'\rvert \mid g, C\,\bigr]
-= \sum_{p} \frac{n_p}{|C|}\, n_p
+\mathbb{E}\bigl[\thinspace\lvert C'\rvert \mid g, C\thinspace\bigr]
+= \sum_{p} \frac{n_p}{|C|}\thinspace n_p
 = \frac{1}{|C|} \sum_{p} n_p^{2}.
 $$
 
 The two are linked **exactly** through the logarithm:
 
 $$
-\mathbb{E}\bigl[\log_2 \lvert C'\rvert \,\big|\, g, C\bigr] = \log_2 |C| - H(g).
+\mathbb{E}\bigl[\log_2 \lvert C'\rvert \thinspace\big|\thinspace g, C\bigr] = \log_2 |C| - H(g).
 $$
 
 That is an identity, not an approximation. The expected *size* $\mathbb{E}[\lvert C'\rvert]$ is not
@@ -336,12 +336,12 @@ which sees a smaller and therefore less informative feasible set.
 The game ends after six guesses. If a guess leaves a feasible set of size $m$, and the
 remaining guesses are made uniformly at random among the consistent candidates, the number
 of further guesses needed is $\mathbb{E}[\min(T, 5)]$ with $T$ uniform on
-$\{1, \dots, m\}$:
+$\lbrace 1, \dots, m\rbrace$:
 
 $$
 c(m) = \mathbb{E}[\min(T,5)] =
 \begin{cases}
-\dfrac{m+1}{2} & m < 5 \\[6pt]
+\dfrac{m+1}{2} & m < 5 \\\\[6pt]
 5 - \dfrac{10}{m} & m \ge 5
 \end{cases}
 $$
@@ -349,7 +349,7 @@ $$
 and the expected number of guesses for an opener $g$ is the concave functional
 
 $$
-\mathbb{E}[\text{guesses}] = 1 + \sum_{p} \frac{n_p}{|C|}\; c(n_p).
+\mathbb{E}[\text{guesses}] = 1 + \sum_{p} \frac{n_p}{|C|}\thickspace c(n_p).
 $$
 
 **This concavity is real and it explains the disagreement between criteria.** For $m \ge 5$,
@@ -419,7 +419,7 @@ note; re-measured on this project's list it is **0.923** (see §7).
 
 Together these explain the empirical ranking without any search: the best openers are
 permutations of the commonest letters. The measured average-guess top twenty are built from
-$\{a, e, t, l, s, c, r, n, p\}$, and six of them (`slate`, `least`, `slant`, `stale`,
+$\lbrace a, e, t, l, s, c, r, n, p\rbrace$, and six of them (`slate`, `least`, `slant`, `stale`,
 `dealt`, `leant`) are permutations of the *same five letters* — because **the information
 in an opening word is in which common letters it tests, not in their arrangement**. Note
 that the *entropy* top twenty is a different list and does contain `d`, `i` and `o`; §7
@@ -449,7 +449,7 @@ with $m = |C|$ and a uniform posterior:
 - the chance it wins immediately is
 
 $$
-p(g) = \begin{cases} 1/m & g \in C \\ 0 & g \notin C \end{cases}
+p(g) = \begin{cases} 1/m & g \in C \\\\ 0 & g \notin C \end{cases}
 $$
 
 and the score is
@@ -463,7 +463,7 @@ $$
 with
 
 $$
-f(x) = 2^{-x} + 2\bigl(1 - 2^{-x}\bigr) + \frac{1.5\,x}{11.5}.
+f(x) = 2^{-x} + 2\bigl(1 - 2^{-x}\bigr) + \frac{1.5\thinspace x}{11.5}.
 $$
 
 The guess with the **smallest** score is played.
@@ -507,7 +507,7 @@ A Wordle strategy **is** a decision tree:
 
 - a **node** is a feasible set $C$ plus the words already played;
 - an **edge** is one of the 243 colour patterns;
-- the **child** is the subset $C_p = \{s \in C : p(g, s) = p\}$;
+- the **child** is the subset $C_p = \lbrace s \in C : p(g, s) = p\rbrace$;
 - a **leaf** is a singleton (solved) or a node at depth six (lost).
 
 The globally optimal tree minimises expected depth over the uniform secret. Solving that

@@ -170,7 +170,7 @@ With a uniformly chosen secret and deterministic feedback:
 $$
 P(\text{secret}=w \mid \text{evidence}) \propto
 \begin{cases}
-1 & \text{if } w \text{ is consistent with every round},\\
+1 & \text{if } w \text{ is consistent with every round},\\\\
 0 & \text{otherwise.}
 \end{cases}
 $$
