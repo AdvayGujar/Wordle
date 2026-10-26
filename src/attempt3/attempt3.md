@@ -1,9 +1,10 @@
 # Attempt 3 — information theory as the strategy
 
-**Status:** 🟩 **Gate A passed — A0/A1/A2 implemented.** `config.py`, `patterns.py` and
-`objective.py` are done, with 98 tests. The criterion reproduces the two worked examples of
-§2.7 and every opener number quoted in §2.2, §2.3 and §3.7, and it picks `raise` at the
-empty history. Phase B (the pickers) is next. This file records the mathematics, the
+**Status:** 🟩 **Phase A complete (A0-A3).** `config.py`, `patterns.py`, `objective.py` and
+`letterStats.py` are done, with 129 tests. Gate A passed: the criterion reproduces the two
+worked examples of §2.7 and every opener number quoted in §2.2, §2.3 and §3.7, and it picks
+`raise` at the empty history. `letterStats.py` reproduces the §2.6 table and the 0.923
+correlation. Phase B (the pickers) is next. This file records the mathematics, the
 measurements that decide the design, the criterion the implementation uses, and the
 remaining build plan.
 
@@ -273,6 +274,14 @@ permutations of the commonest letters. The measured average-guess top twenty are
 in an opening word is in which common letters it tests, not in their arrangement**. Note
 that the *entropy* top twenty is a different list and does contain `d`, `i` and `o`; §7
 records the correction.
+
+**Implemented and verified.** `letterStats.py` computes all of this, and
+`tests/test_attempt3LetterStats.py` pins the table above bucket for bucket and the 0.923. One
+definition is forced by that number: "letter frequency" counts every **occurrence**, so the
+two `b`s of `abbey` both count. Counting each letter once per word instead gives 0.9365, not
+0.923. The frequency proxy on its own is won by `eerie` — the highest mean letter frequency
+in the answer list and a poor opener — which is exactly why the correlation is restricted to
+the five-distinct-letter subset.
 
 ### 2.7 The criterion used: expected score
 
@@ -658,9 +667,14 @@ PYTHONPATH=src .venv/bin/python -m attempt3.adaptivePicker   # one call, for a s
 These are recorded because the results section must not repeat claims that the data does not
 support.
 
-1. **§2.5's \(c(m)\) functional is not the decision rule.** Implemented literally it ranks
-   `fuzzy` first and never guesses the answer (0–1% win rate). It remains a teaching model
-   and a diagnostic, not the policy.
+1. **§2.5's \(c(m)\) functional is not the decision rule.** Re-measured at Gate A over all
+   2,315 answers, it ranks `trace` 1, `slate` 2 and `raise` 18, correlates with entropy at
+   0.95, and puts `fuzzy`, `vivid` and `mummy` near the **bottom** - the opposite of what
+   the first draft claimed. The 0-1% win rate was measured on the naive version that
+   charged a further guess for the winning branch; with that correction a singleton prefers
+   the answer. What survives is its indifference on the last turn, where the cap makes a
+   win and a loss cost the same, and that is why the criterion needs the win-chance term.
+   See §2.5.1.
 2. **"144 openers within 0.05 of the best" is not reproducible from the saved first pass.**
    At 400 games per opener only 10 are within 0.05 of 3.750, and the standard error (~0.04)
    is larger than the band. Recompute from the refined top-60 before quoting.
